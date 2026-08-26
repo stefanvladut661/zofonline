@@ -31,3 +31,6 @@ dist-ssr
 .vite
 base44/.app.jsonc
 test/.build/
+
+# baza de date locala a serverului
+server/data/
