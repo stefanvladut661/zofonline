@@ -1,0 +1,72 @@
+{
+  "name": "AppSettings",
+  "type": "object",
+  "properties": {
+    "api_base_url": {
+      "type": "string",
+      "default": "http://localhost:3001/api",
+      "description": "URL-ul de baz\u0103 al API-ului bridge Dorsoft"
+    },
+    "refresh_dashboard": {
+      "type": "number",
+      "default": 15,
+      "description": "Interval refresh dashboard (secunde)"
+    },
+    "refresh_charts": {
+      "type": "number",
+      "default": 30,
+      "description": "Interval refresh grafice (secunde)"
+    },
+    "refresh_reports": {
+      "type": "number",
+      "default": 60,
+      "description": "Interval refresh rapoarte (secunde)"
+    },
+    "shopify_store_url": {
+      "type": "string",
+      "description": "URL magazin Shopify"
+    },
+    "shopify_api_key": {
+      "type": "string",
+      "description": "Cheie API Shopify"
+    },
+    "shopify_access_token": {
+      "type": "string",
+      "description": "Token acces Shopify"
+    },
+    "theme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "auto"
+      ],
+      "default": "dark"
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "fizic",
+              "online"
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "api_base_url"
+  ]
+}

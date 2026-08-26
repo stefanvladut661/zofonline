@@ -1,0 +1,79 @@
+{
+  "name": "Connector",
+  "type": "object",
+  "properties": {
+    "connector_id": {
+      "type": "string",
+      "description": "ID unic per instalare / PC"
+    },
+    "name": {
+      "type": "string",
+      "description": "Denumire connector (ex: PC Arges Mall 1)"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "ID loca\u021bie asignat\u0103"
+    },
+    "location_name": {
+      "type": "string",
+      "description": "Numele loca\u021biei"
+    },
+    "api_key": {
+      "type": "string",
+      "description": "Cheia API pentru autentificare"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "online",
+        "offline",
+        "warning"
+      ],
+      "default": "offline"
+    },
+    "last_heartbeat": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Ultimul heartbeat primit"
+    },
+    "last_sync_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Ultima sincronizare reu\u0219it\u0103"
+    },
+    "sync_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Num\u0103rul total de sincroniz\u0103ri"
+    },
+    "last_error_message": {
+      "type": "string",
+      "description": "Ultimul mesaj de eroare"
+    },
+    "dorsoft_sync_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Sincronizare Dorsoft activ\u0103"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "dorsoft",
+        "shopify",
+        "manual",
+        "system"
+      ],
+      "default": "dorsoft"
+    },
+    "heartbeat_threshold_seconds": {
+      "type": "number",
+      "default": 90,
+      "description": "Secundele dup\u0103 care un connector este marcat offline"
+    }
+  },
+  "required": [
+    "connector_id",
+    "location_id",
+    "api_key"
+  ]
+}

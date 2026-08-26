@@ -1,0 +1,19 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "angajat"
+      ],
+      "default": "angajat",
+      "description": "Rolul utilizatorului"
+    },
+    "assigned_location": {
+      "type": "string",
+      "description": "Loca\u021bia asignat\u0103 (pentru angaja\u021bi)"
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "name": "SyncEvent",
+  "type": "object",
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "SALE_CREATED",
+        "STOCK_UPDATED",
+        "TRANSFER_CREATED",
+        "PRODUCT_UPDATED",
+        "HEARTBEAT",
+        "CONNECTOR_ONLINE",
+        "CONNECTOR_OFFLINE",
+        "SYNC_FULL",
+        "SYNC_INCREMENTAL"
+      ],
+      "description": "Tipul evenimentului"
+    },
+    "connector_id": {
+      "type": "string",
+      "description": "ID-ul connectorului surs\u0103"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "ID-ul loca\u021biei"
+    },
+    "location_name": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "dorsoft",
+        "shopify",
+        "manual",
+        "system"
+      ],
+      "default": "dorsoft"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Snapshot complet al datelor evenimentului"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "error",
+        "warning"
+      ],
+      "default": "ok"
+    },
+    "error_message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_type",
+    "connector_id",
+    "location_id",
+    "source_type",
+    "timestamp"
+  ]
+}

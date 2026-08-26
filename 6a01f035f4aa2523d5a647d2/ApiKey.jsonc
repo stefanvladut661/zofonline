@@ -1,0 +1,36 @@
+{
+  "name": "ApiKey",
+  "type": "object",
+  "properties": {
+    "key_value": {
+      "type": "string",
+      "description": "Valoarea cheii API (hash)"
+    },
+    "connector_id": {
+      "type": "string",
+      "description": "ID-ul connectorului asociat"
+    },
+    "name": {
+      "type": "string",
+      "description": "Denumire cheie (ex: Arges Mall PC1)"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Cheia este activ\u0103"
+    },
+    "last_used": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "revoked_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "key_value",
+    "connector_id",
+    "name"
+  ]
+}
