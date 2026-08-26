@@ -1,28 +1,50 @@
-const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
-
 /**
  * Connector Service
- * Manages API key auth, heartbeat processing, event ingestion,
- * and the REST API surface exposed to external Dorsoft connectors.
+ * Gestioneaza cheile API, heartbeat-ul, ingestia de evenimente si starea
+ * connectorilor Dorsoft.
  *
- * Architecture: Base44 acts as the central aggregation backend.
- * External connectors authenticate with Bearer API keys and push data
- * via the DorsoftAPI bridge. This service handles the frontend side
- * of that contract (validation, logging, state management).
+ * Arhitectura: entitatile trec prin src/lib/data (schema + adaptor), nu prin
+ * niciun SDK extern. Cat timp adaptorul e cel local, functiile astea opereaza
+ * in browser; cand backend-ul central e gata (Faza 1) acelasi cod ajunge pe
+ * server fara modificari — de aceea nu depinde de nimic din UI.
  */
+
+import { db } from '@/lib/data';
 
 // ─── API Key Management ──────────────────────────────────────────────────────
 
+/**
+ * Genereaza o cheie API cu 256 de biti de entropie criptografica.
+ * Versiunea anterioara folosea Math.random() — predictibil, nepotrivit pentru
+ * un secret care autentifica un connector (plan.md §9).
+ */
 export function generateApiKey(connectorId) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const random = Array.from({ length: 40 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `zof_${connectorId}_${random}`;
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `zof_${connectorId}_${secret}`;
 }
 
+/** SHA-256 hex. Singura forma sub care o cheie ajunge sa fie stocata. */
+export async function hashApiKey(keyValue) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(keyValue));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Prefix scurt, doar ca sa poti identifica o cheie in UI fara sa o expui. */
+export function apiKeyPrefix(keyValue) {
+  return `${keyValue.slice(0, 12)}…${keyValue.slice(-4)}`;
+}
+
+/**
+ * Creeaza o cheie si o returneaza IN CLAR o singura data, apelantului.
+ * Nu se mai poate recupera dupa — in baza raman doar hash-ul si prefixul.
+ */
 export async function createApiKey(connectorId, name) {
   const keyValue = generateApiKey(connectorId);
   await db.entities.ApiKey.create({
-    key_value: keyValue,
+    key_hash: await hashApiKey(keyValue),
+    key_prefix: apiKeyPrefix(keyValue),
     connector_id: connectorId,
     name,
     is_active: true,
@@ -38,7 +60,10 @@ export async function revokeApiKey(keyId) {
 }
 
 export async function validateApiKey(keyValue) {
-  const keys = await db.entities.ApiKey.filter({ key_value: keyValue, is_active: true });
+  const keys = await db.entities.ApiKey.filter({
+    key_hash: await hashApiKey(keyValue),
+    is_active: true,
+  });
   if (!keys?.length) throw new Error('Invalid or revoked API key');
   await db.entities.ApiKey.update(keys[0].id, { last_used: new Date().toISOString() });
   return keys[0];
@@ -53,7 +78,8 @@ export async function createConnector({ connectorId, name, locationId, locationN
     name,
     location_id: locationId,
     location_name: locationName,
-    api_key: apiKey,
+    api_key: apiKeyPrefix(apiKey),
+    api_key_hash: await hashApiKey(apiKey),
     status: 'offline',
     sync_count: 0,
     source_type: sourceType,

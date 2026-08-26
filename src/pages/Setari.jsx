@@ -1,8 +1,7 @@
-const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
-
 import React, { useState, useEffect } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useUserRole } from '@/lib/hooks/useUserRole';
+import { db } from '@/lib/data';
 import { DorsoftAPI, setApiBaseUrl, getApiBaseUrl } from '@/lib/api-service';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -27,8 +26,6 @@ export default function Setari() {
   const [refreshCharts, setRefreshCharts] = useState(30);
   const [refreshReports, setRefreshReports] = useState(60);
   const [shopifyUrl, setShopifyUrl] = useState('');
-  const [shopifyKey, setShopifyKey] = useState('');
-  const [shopifyToken, setShopifyToken] = useState('');
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [testing, setTesting] = useState(false);
 
@@ -46,8 +43,6 @@ export default function Setari() {
       if (s.refresh_charts) setRefreshCharts(s.refresh_charts);
       if (s.refresh_reports) setRefreshReports(s.refresh_reports);
       if (s.shopify_store_url) setShopifyUrl(s.shopify_store_url);
-      if (s.shopify_api_key) setShopifyKey(s.shopify_api_key);
-      if (s.shopify_access_token) setShopifyToken(s.shopify_access_token);
     }
   }, [settings]);
 
@@ -72,8 +67,6 @@ export default function Setari() {
       refresh_charts: refreshCharts,
       refresh_reports: refreshReports,
       shopify_store_url: shopifyUrl,
-      shopify_api_key: shopifyKey,
-      shopify_access_token: shopifyToken,
     });
   };
 
@@ -160,13 +153,10 @@ export default function Setari() {
             <Label className="text-xs">URL Magazin Shopify</Label>
             <Input value={shopifyUrl} onChange={e => setShopifyUrl(e.target.value)} placeholder="https://your-store.myshopify.com" className="mt-1" />
           </div>
-          <div>
-            <Label className="text-xs">API Key</Label>
-            <Input value={shopifyKey} onChange={e => setShopifyKey(e.target.value)} placeholder="API Key" className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-xs">Access Token</Label>
-            <Input type="password" value={shopifyToken} onChange={e => setShopifyToken(e.target.value)} placeholder="Access Token" className="mt-1" />
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600">
+            API Key și Access Token nu se configurează de aici. Sunt secrete și ar fi
+            fost salvate în clar într-o entitate citibilă din browser. Se mută în secret
+            store-ul backend-ului, la integrarea Shopify (Faza 4).
           </div>
         </div>
       </motion.div>

@@ -1,5 +1,3 @@
-const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
-
 import React, { useState, useEffect } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import ConnectorCard from '@/components/conectori/ConnectorCard';
@@ -7,6 +5,7 @@ import AddConnectorDialog from '@/components/conectori/AddConnectorDialog';
 import ApiKeyRevealDialog from '@/components/conectori/ApiKeyRevealDialog';
 import EventLogTable from '@/components/conectori/EventLogTable';
 import { useUserRole } from '@/lib/hooks/useUserRole';
+import { db } from '@/lib/data';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createConnector, deleteConnector, checkConnectorStatuses, buildHealthResponse, buildConnectorsResponse } from '@/lib/connector-service';
@@ -93,11 +92,6 @@ export default function Conectori() {
     } finally {
       setTesting(null);
     }
-  };
-
-  const handleCopyKey = (key) => {
-    navigator.clipboard.writeText(key);
-    toast.success('Cheie copiată în clipboard');
   };
 
   const checkApiHealth = async () => {
@@ -218,7 +212,6 @@ export default function Conectori() {
                   connector={c}
                   onDelete={handleDelete}
                   onTestConnection={handleTestConnection}
-                  onCopyKey={handleCopyKey}
                   testing={testing}
                 />
                 <div className="flex items-center gap-2 px-1">

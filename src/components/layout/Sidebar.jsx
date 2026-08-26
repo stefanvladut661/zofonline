@@ -1,8 +1,7 @@
-const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
-
 import React, { useState } from 'react';
 import { useTheme } from '@/lib/hooks/useTheme';
 import { useUserRole } from '@/lib/hooks/useUserRole';
+import { useAuth } from '@/lib/AuthContext';
 
 import { Link, useLocation } from 'react-router-dom';
 import { 
@@ -27,6 +26,7 @@ export default function Sidebar({ collapsed, onToggle, alertCount = 0 }) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { isAdmin } = useUserRole();
+  const { logout } = useAuth();
 
   const filteredItems = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin);
 
@@ -93,7 +93,7 @@ export default function Sidebar({ collapsed, onToggle, alertCount = 0 }) {
           {!collapsed && <span>{theme === 'dark' ? 'Mod luminos' : 'Mod întunecat'}</span>}
         </button>
         <button 
-          onClick={() => db.auth.logout()}
+          onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 w-full transition-all"
         >
           <LogOut className="w-[18px] h-[18px] shrink-0" />

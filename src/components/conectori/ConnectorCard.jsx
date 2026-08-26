@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Wifi, WifiOff, MapPin, Globe, Clock, RefreshCw, Trash2, Copy, AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, MapPin, Globe, Clock, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
 import { formatNumber, timeAgo } from '@/lib/format';
 
 const STATUS_CONFIG = {
@@ -11,7 +11,7 @@ const STATUS_CONFIG = {
   warning: { label: 'Avertisment', icon: AlertTriangle, badge: 'bg-amber-500/10 text-amber-600 border-amber-500/20', dot: 'bg-amber-500' },
 };
 
-export default function ConnectorCard({ connector, onDelete, onTestConnection, onCopyKey, testing }) {
+export default function ConnectorCard({ connector, onDelete, onTestConnection, testing }) {
   const status = STATUS_CONFIG[connector.status] || STATUS_CONFIG.offline;
   const StatusIcon = status.icon;
 
@@ -71,9 +71,15 @@ export default function ConnectorCard({ connector, onDelete, onTestConnection, o
             : <Wifi className="w-3 h-3" />}
           Test
         </Button>
-        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onCopyKey(connector.api_key)}>
-          <Copy className="w-3 h-3" /> Cheie
-        </Button>
+        {/* Cheia nu mai e stocata in clar (doar hash + prefix), deci nu mai poate
+            fi copiata de aici. Afisam prefixul strict ca sa poti identifica ce
+            cheie e instalata pe PC-ul din locatie. */}
+        <span
+          className="px-2.5 flex items-center rounded-md border border-border bg-muted/40 font-mono text-[10px] text-muted-foreground"
+          title="Prefixul cheii API — cheia completa se vede o singura data, la generare"
+        >
+          {connector.api_key || '—'}
+        </span>
         <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-destructive hover:text-destructive" onClick={() => onDelete(connector)}>
           <Trash2 className="w-3 h-3" />
         </Button>
