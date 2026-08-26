@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import { ZofAPI } from '@/lib/api-service';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, UNAUTHORIZED_EVENT } from '@/lib/api/client';
 
 /**
  * Contextul de autentificare.
@@ -44,6 +44,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkUserAuth();
   }, [checkUserAuth]);
+
+  // Sesiunea poate expira in timp ce aplicatia e deschisa. Fara asta, ecranele
+  // ar continua sa incerce cereri care esueaza, fara sa spuna de ce.
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    globalThis.addEventListener?.(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => globalThis.removeEventListener?.(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   const login = useCallback(async (email, password) => {
     const loggedIn = await ZofAPI.auth.login(email, password);

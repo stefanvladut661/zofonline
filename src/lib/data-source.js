@@ -73,7 +73,17 @@ export function demoFallback(key, fetcher, demoValue) {
       const data = await fetcher();
       markSource(key, false);
       return data;
-    } catch {
+    } catch (err) {
+      // Cadem pe date demo DOAR cand serverul e inaccesibil (status 0): asta e
+      // cazul pentru care exista fallback-ul, dezvoltare fara backend pornit.
+      //
+      // O sesiune expirata (401) sau o eroare de server (500) nu inseamna
+      // „arata cifre inventate" — ar ascunde problema reala in spatele unor
+      // numere plauzibile. Le lasam sa iasa la suprafata.
+      if (err?.status !== 0) {
+        markSource(key, false);
+        throw err;
+      }
       markSource(key, true);
       return demoValue;
     }

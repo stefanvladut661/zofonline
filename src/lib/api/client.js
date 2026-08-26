@@ -18,6 +18,12 @@ export function getApiBaseUrl() {
   return baseUrl;
 }
 
+/**
+ * Emis cand serverul raspunde 401 pe o cerere obisnuita: sesiunea a expirat sau
+ * a fost invalidata. AuthContext asculta si intoarce utilizatorul la login.
+ */
+export const UNAUTHORIZED_EVENT = 'zof:unauthorized';
+
 export class ApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -48,6 +54,11 @@ export async function request(method, path, { body, timeoutMs = 15_000 } = {}) {
 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
+    // /auth/me raspunde 401 cand nu esti logat — asta e normal la pornire, nu o
+    // sesiune expirata, deci nu declansam evenimentul pentru el.
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      globalThis.dispatchEvent?.(new CustomEvent(UNAUTHORIZED_EVENT));
+    }
     throw new ApiError(res.status, data?.error ?? `Eroare ${res.status}`);
   }
   return data;

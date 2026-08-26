@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ZofAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
+import { DEMO_ALERTS } from '@/lib/demo-data';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import Footer from './Footer';
@@ -7,7 +11,19 @@ import DemoDataBanner from './DemoDataBanner';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const alertCount = 5; // Will be dynamic
+
+  // Badge-ul din meniu arata numarul real de alerte. Inainte era fix 5,
+  // hardcodat, cu un comentariu „Will be dynamic".
+  // Aceeasi cheie si acelasi fetcher ca pagina Alerte, ca react-query sa
+  // partajeze cache-ul in loc sa ceara datele de doua ori.
+  const { data: alerts = [] } = useQuery({
+    queryKey: ['alerts'],
+    queryFn: demoFallback('alerts', ZofAPI.getAlerts, DEMO_ALERTS),
+    refetchInterval: 60_000,
+    retry: false,
+    throwOnError: false,
+  });
+  const alertCount = alerts.length;
 
   return (
     <div className="min-h-screen bg-background">

@@ -8,7 +8,8 @@ import { renderToString } from 'react-dom/server';
 import LiveBadge from '@/components/ui/LiveBadge';
 import DemoDataBanner from '@/components/layout/DemoDataBanner';
 import PageHeader from '@/components/ui/PageHeader';
-import { markSource } from '@/lib/data-source';
+import { markSource, demoFallback } from '@/lib/data-source';
+import { ApiError } from '@/lib/api/client';
 
 const has = (h, s) => h.includes(s);
 let pass = 0, fail = 0;
@@ -34,7 +35,33 @@ ok('numara sectiunile afectate', has(b, '2 '));
 ok('arata url-ul bridge-ului', has(b, 'localhost:3001'));
 ok('are role=alert', has(b, 'role="alert"'));
 
+console.log('\n--- demoFallback: cand cade pe demo si cand NU ---');
+const DEMO = [{ fake: true }];
+
+// Server oprit / retea cazuta -> ApiError cu status 0. Singurul caz in care
+// fallback-ul pe date demo e corect.
+ok('server inaccesibil -> date demo',
+  (await demoFallback('t-unreachable',
+    () => Promise.reject(new ApiError(0, 'Serverul nu raspunde')), DEMO)()) === DEMO);
+
+// Sesiune expirata: a arata cifre inventate ar ascunde problema reala.
+let threw401 = false;
+try {
+  await demoFallback('t-401', () => Promise.reject(new ApiError(401, 'Neautorizat')), DEMO)();
+} catch (e) { threw401 = e.status === 401; }
+ok('sesiune expirata (401) -> arunca, NU date demo', threw401);
+
+let threw500 = false;
+try {
+  await demoFallback('t-500', () => Promise.reject(new ApiError(500, 'Eroare')), DEMO)();
+} catch (e) { threw500 = e.status === 500; }
+ok('eroare de server (500) -> arunca, NU date demo', threw500);
+
+ok('succesul trece datele reale',
+  (await demoFallback('t-ok', () => Promise.resolve(['real']), DEMO)())[0] === 'real');
+
 console.log('\n--- Revenire pe LIVE ---');
+markSource('t-unreachable', false);
 markSource('dashboard', false);
 markSource('top-products', false);
 ok('banner-ul dispare', renderToString(<DemoDataBanner />) === '');
