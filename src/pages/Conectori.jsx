@@ -5,11 +5,10 @@ import AddConnectorDialog from '@/components/conectori/AddConnectorDialog';
 import ApiKeyRevealDialog from '@/components/conectori/ApiKeyRevealDialog';
 import EventLogTable from '@/components/conectori/EventLogTable';
 import { useUserRole } from '@/lib/hooks/useUserRole';
-import { db } from '@/lib/data';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createConnector, deleteConnector, checkConnectorStatuses, buildHealthResponse } from '@/lib/connector-service';
-import { DorsoftAPI, getApiBaseUrl } from '@/lib/api-service';
+import { ZofAPI, getApiBaseUrl } from '@/lib/api-service';
+import { timeAgo } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -33,30 +32,38 @@ export default function Conectori() {
 
   const { data: connectors = [], isLoading } = useQuery({
     queryKey: ['connectors'],
-    queryFn: () => db.entities.Connector.list('-created_date'),
+    queryFn: () => ZofAPI.admin.listConnectors(),
     refetchInterval: 15000,
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ['sync-events'],
-    queryFn: () => db.entities.SyncEvent.list('-timestamp', 100),
+    queryFn: () => ZofAPI.admin.listSyncEvents({ limit: 100 }),
     refetchInterval: 10000,
   });
 
-  // Auto-check connector statuses every 30s
+  // Trecerea unui agent tacut in offline o face serverul, periodic. Aici doar
+  // reimprospatam ca sa se vada schimbarea.
   useEffect(() => {
-    const tick = () => checkConnectorStatuses().then(() => queryClient.invalidateQueries({ queryKey: ['connectors'] }));
-    tick();
-    const interval = setInterval(tick, 30000);
+    const interval = setInterval(
+      () => queryClient.invalidateQueries({ queryKey: ['connectors'] }),
+      30000,
+    );
     return () => clearInterval(interval);
   }, [queryClient]);
 
   const handleAddConnector = async (formData) => {
     setSaving(true);
     try {
-      const { connector, apiKey } = await createConnector(formData);
+      const { apiKey } = await ZofAPI.admin.createConnector({
+        connector_id: formData.connectorId,
+        location_id: formData.locationId,
+        name: formData.name,
+        source_type: formData.sourceType,
+      });
       await queryClient.invalidateQueries({ queryKey: ['connectors'] });
       setAddOpen(false);
+      // Cheia se vede o singura data — serverul o pastreaza doar criptata.
       setNewKeyDialog({ apiKey, connectorName: formData.name });
       toast.success(`Connector "${formData.name}" creat cu succes`);
     } catch (err) {
@@ -69,7 +76,7 @@ export default function Conectori() {
   const handleDelete = async (connector) => {
     if (!confirm(`Ștergi conectorul "${connector.name}"? Cheia API asociată va fi revocată.`)) return;
     try {
-      await deleteConnector(connector.id, connector.connector_id);
+      await ZofAPI.admin.deleteConnector(connector.id);
       await queryClient.invalidateQueries({ queryKey: ['connectors'] });
       toast.success('Connector șters');
     } catch (err) {
@@ -77,18 +84,25 @@ export default function Conectori() {
     }
   };
 
+  // „Testul" nu poate pinga agentul: agentul e cel care initiaza conexiunea,
+  // niciodata invers (plan.md §2). Ce putem verifica e cand a vorbit ultima
+  // data cu serverul.
   const handleTestConnection = async (connector) => {
     setTesting(connector.id);
     try {
-      const start = Date.now();
-      await DorsoftAPI.testConnection();
-      const latency = Date.now() - start;
-      toast.success(`Conexiune reușită (${latency}ms)`);
-      await db.entities.Connector.update(connector.id, { status: 'online', last_heartbeat: new Date().toISOString() });
       await queryClient.invalidateQueries({ queryKey: ['connectors'] });
-    } catch {
-      toast.error('Conexiune eșuată — bridge-ul nu răspunde');
-      await db.entities.Connector.update(connector.id, { status: 'offline' });
+      const fresh = (await ZofAPI.admin.listConnectors())
+        .find((c) => c.id === connector.id);
+
+      if (fresh?.status === 'online') {
+        toast.success(`Agent activ — ultim heartbeat ${timeAgo(fresh.last_heartbeat)}`);
+      } else if (fresh?.last_heartbeat) {
+        toast.warning(`Agent tăcut din ${timeAgo(fresh.last_heartbeat)}`);
+      } else {
+        toast.warning('Agentul nu a contactat niciodată serverul');
+      }
+    } catch (err) {
+      toast.error(`Eroare: ${err.message}`);
     } finally {
       setTesting(null);
     }
@@ -97,8 +111,7 @@ export default function Conectori() {
   const checkApiHealth = async () => {
     try {
       const start = Date.now();
-      await DorsoftAPI.testConnection();
-      const health = buildHealthResponse(connectors);
+      const health = await ZofAPI.admin.health();
       setApiHealth({ ...health, latency: Date.now() - start, ok: true });
     } catch {
       setApiHealth({ ok: false, status: 'unavailable', timestamp: new Date().toISOString() });
@@ -106,7 +119,7 @@ export default function Conectori() {
   };
 
   const toggleDorsoftSync = async (connector, enabled) => {
-    await db.entities.Connector.update(connector.id, { dorsoft_sync_enabled: enabled });
+    await ZofAPI.admin.updateConnector(connector.id, { dorsoft_sync_enabled: enabled });
     await queryClient.invalidateQueries({ queryKey: ['connectors'] });
   };
 

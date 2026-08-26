@@ -175,15 +175,22 @@ export function startServer({ port = PORT } = {}) {
   sweep.unref();
 
   const server = createServer();
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `\n  Portul ${port} e deja folosit de alt proces.\n` +
+        '  Schimba PORT in .env, sau opreste procesul care il ocupa.\n',
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
+
   server.listen(port, () => {
     console.log(`\n  Zof API  →  http://localhost:${port}`);
     console.log(`  CORS     →  ${CORS_ORIGINS.join(', ')}`);
     console.log(`  Mediu    →  ${IS_PROD ? 'productie' : 'dezvoltare'}\n`);
   });
   return server;
-}
-
-// Porneste doar cand fisierul e rulat direct, nu cand e importat de teste.
-if (process.argv[1] && import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
-  startServer();
 }

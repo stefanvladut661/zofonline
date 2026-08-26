@@ -1,21 +1,20 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { db } from '@/lib/data';
+import { ZofAPI } from '@/lib/api-service';
+import { ApiError } from '@/lib/api/client';
 
 /**
  * Contextul de autentificare.
  *
- * Rescris la detasarea de Base44. Versiunea veche apela `createAxiosClient(...)`
- * — o functie care nu era importata si nu exista nicaieri in cod — plus
- * endpoint-ul proprietar /api/apps/public. Ambele au disparut; sursa de adevar
- * e acum providerul din src/lib/auth/session.js.
+ * Sesiunea traieste intr-un cookie HttpOnly pus de server; aici nu tinem niciun
+ * token. `me()` intoarce 401 cand nu esti logat — asta nu e o eroare, e raspunsul
+ * normal pentru „nu am sesiune", si il tratam ca atare.
  */
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -24,17 +23,18 @@ export const AuthProvider = ({ children }) => {
     setIsLoadingAuth(true);
     setAuthError(null);
     try {
-      const currentUser = await db.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
+      setUser(await ZofAPI.auth.me());
     } catch (error) {
-      console.error('[auth] Verificarea sesiunii a esuat:', error);
       setUser(null);
-      setIsAuthenticated(false);
-      setAuthError({
-        type: error.type ?? 'auth_required',
-        message: error.message ?? 'Autentificare necesara',
-      });
+      // 401 = pur si simplu nu esti logat. Orice altceva (server oprit, CORS,
+      // 500) e o problema reala si trebuie spusa, nu ascunsa in spatele
+      // ecranului de login.
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        setAuthError({
+          type: error.status === 0 ? 'server_unreachable' : 'unknown',
+          message: error.message,
+        });
+      }
     } finally {
       setIsLoadingAuth(false);
       setAuthChecked(true);
@@ -45,20 +45,30 @@ export const AuthProvider = ({ children }) => {
     checkUserAuth();
   }, [checkUserAuth]);
 
+  const login = useCallback(async (email, password) => {
+    const loggedIn = await ZofAPI.auth.login(email, password);
+    setUser(loggedIn);
+    setAuthError(null);
+    return loggedIn;
+  }, []);
+
   const logout = useCallback(async () => {
-    await db.auth.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+    try {
+      await ZofAPI.auth.logout();
+    } finally {
+      setUser(null);
+    }
   }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated,
+        isAuthenticated: !!user,
         isLoadingAuth,
         authError,
         authChecked,
+        login,
         logout,
         checkUserAuth,
       }}

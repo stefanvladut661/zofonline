@@ -1,7 +1,7 @@
 import React from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
-import { DorsoftAPI } from '@/lib/api-service';
+import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_SHOPIFY_ORDERS, DEMO_DASHBOARD } from '@/lib/demo-data';
 import { formatCurrency, timeAgo } from '@/lib/format';
@@ -19,12 +19,12 @@ const STATUS_MAP = {
 export default function ComenziOnline() {
   const { data: orders, isLoading: loadingOrders } = useApiPolling(
     'shopify-orders',
-    demoFallback('shopify-orders', DorsoftAPI.getShopifyOrders, DEMO_SHOPIFY_ORDERS),
+    demoFallback('shopify-orders', ZofAPI.getShopifyOrders, DEMO_SHOPIFY_ORDERS),
     30000);
 
   const { data: dash } = useApiPolling(
     'dashboard-shopify',
-    demoFallback('dashboard-shopify', DorsoftAPI.getDashboard, DEMO_DASHBOARD),
+    demoFallback('dashboard-shopify', ZofAPI.getDashboard, DEMO_DASHBOARD),
     30000);
 
   const pendingCount = (orders || []).filter(o => o.status === 'pending').length;

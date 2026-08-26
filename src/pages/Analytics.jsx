@@ -1,7 +1,7 @@
 import React from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
-import { DorsoftAPI } from '@/lib/api-service';
+import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_MONTHLY_SALES, DEMO_BRANDS, DEMO_CATEGORIES, DEMO_PERFORMANCE } from '@/lib/demo-data';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
@@ -47,22 +47,22 @@ function ChartCard({ title, children, className = '' }) {
 export default function Analytics() {
   const { data: monthlySales } = useApiPolling(
     'monthly-sales',
-    demoFallback('monthly-sales', DorsoftAPI.getMonthlySales, DEMO_MONTHLY_SALES),
+    demoFallback('monthly-sales', ZofAPI.getMonthlySales, DEMO_MONTHLY_SALES),
     60000);
 
   const { data: brands } = useApiPolling(
     'brands',
-    demoFallback('brands', DorsoftAPI.getBrands, DEMO_BRANDS),
+    demoFallback('brands', ZofAPI.getBrands, DEMO_BRANDS),
     60000);
 
   const { data: categories } = useApiPolling(
     'categories',
-    demoFallback('categories', DorsoftAPI.getCategories, DEMO_CATEGORIES),
+    demoFallback('categories', ZofAPI.getCategories, DEMO_CATEGORIES),
     60000);
 
   const { data: performance } = useApiPolling(
     'performance',
-    demoFallback('performance', DorsoftAPI.getPerformance, DEMO_PERFORMANCE),
+    demoFallback('performance', ZofAPI.getPerformance, DEMO_PERFORMANCE),
     60000);
 
   const onlineVsFizic = performance?.online_vs_fizic 

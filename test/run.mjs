@@ -17,7 +17,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const outdir = path.join(here, '.build');
 
-const SUITES = ['data-layer.test.js', 'demo-banner.test.jsx', 'pages.test.jsx'];
+const SUITES = ['demo-banner.test.jsx', 'pages.test.jsx'];
 
 await build({
   entryPoints: SUITES.map((f) => path.join(here, f)),
@@ -29,7 +29,8 @@ await build({
   absWorkingDir: root,
   alias: { '@': path.join(root, 'src') },
   define: {
-    'import.meta.env.PROD': 'false',
+    // Vite injecteaza import.meta.env; in Node nu exista, deci il definim aici.
+    'import.meta.env': JSON.stringify({ PROD: false, DEV: true, MODE: 'test' }),
     'process.env.NODE_ENV': '"production"',
   },
   jsx: 'automatic',

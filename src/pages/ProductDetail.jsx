@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import StatCard from '@/components/ui/StatCard';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
-import { DorsoftAPI } from '@/lib/api-service';
+import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_PRODUCTS, DEMO_DAILY_SALES } from '@/lib/demo-data';
 import { formatCurrency, formatNumber } from '@/lib/format';
@@ -23,14 +23,14 @@ export default function ProductDetail() {
 
   const { data: products } = useApiPolling(
     'products-detail',
-    demoFallback('products-detail', DorsoftAPI.getProducts, DEMO_PRODUCTS),
+    demoFallback('products-detail', ZofAPI.getProducts, DEMO_PRODUCTS),
     60000);
 
   const product = (products || []).find(p => p.sku === sku);
 
   const { data: salesData } = useApiPolling(
     'product-sales',
-    demoFallback('product-sales', DorsoftAPI.getDailySales, DEMO_DAILY_SALES),
+    demoFallback('product-sales', ZofAPI.getDailySales, DEMO_DAILY_SALES),
     60000);
 
   if (!product) {

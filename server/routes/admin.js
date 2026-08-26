@@ -15,11 +15,32 @@ export function listLocations() {
   return all('SELECT * FROM locations ORDER BY name').map((l) => ({ ...l, is_active: !!l.is_active }));
 }
 
+/**
+ * Slug din nume: "Argeș Mall" -> "arges-mall".
+ * Id-urile de locatie se tasteaza de mana (la `connector:add`, in config-ul
+ * agentului), deci un UUID ar fi ostil.
+ */
+function slugify(name) {
+  return name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // scoate diacriticele
+    .replace(/[țţ]/gi, 't').replace(/[șş]/gi, 's')      // ț/ș nu se descompun
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
 export function createLocation(body) {
   const name = String(body?.name ?? '').trim();
   if (!name) throw badRequest('Campul name e obligatoriu');
   const type = body?.type === 'online' ? 'online' : 'fizic';
-  const id = String(body?.id ?? '').trim() || randomId();
+
+  let id = String(body?.id ?? '').trim() || slugify(name) || randomId();
+  // Daca slug-ul e deja luat, adaugam un sufix numeric in loc sa esuam.
+  if (!body?.id) {
+    const base = id;
+    for (let n = 2; get('SELECT id FROM locations WHERE id = ?', id); n++) id = `${base}-${n}`;
+  }
 
   if (get('SELECT id FROM locations WHERE id = ?', id)) {
     throw badRequest(`Exista deja o locatie cu id "${id}"`);

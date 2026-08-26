@@ -11,6 +11,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/lib/AuthContext';
 
+import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Rame from '@/pages/Rame';
 import Analytics from '@/pages/Analytics';
@@ -63,6 +64,7 @@ check('Setari', <Setari />);
 check('Conectori', <Conectori />);
 check('ProductDetail', <ProductDetail />, { route: '/rame/RB-3025-001' });
 check('PageNotFound', <PageNotFound />);
+check('Login', <Login />);
 
 console.log('\n--- Layout ---');
 check('AppLayout', <AppLayout />);

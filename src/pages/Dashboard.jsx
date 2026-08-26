@@ -6,38 +6,38 @@ import TopProductsList from '@/components/dashboard/TopProductsList';
 import LocationsOverview from '@/components/dashboard/LocationsOverview';
 import AlertsPreview from '@/components/dashboard/AlertsPreview';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
-import { DorsoftAPI } from '@/lib/api-service';
+import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_DASHBOARD, DEMO_DAILY_SALES, DEMO_TOP_PRODUCTS, DEMO_LOCATIONS, DEMO_ALERTS } from '@/lib/demo-data';
 
 export default function Dashboard() {
   const { data: dashData, isLoading: loadingDash } = useApiPolling(
     'dashboard',
-    demoFallback('dashboard', DorsoftAPI.getDashboard, DEMO_DASHBOARD),
+    demoFallback('dashboard', ZofAPI.getDashboard, DEMO_DASHBOARD),
     15000
   );
 
   const { data: dailySales, isLoading: loadingSales } = useApiPolling(
     'daily-sales',
-    demoFallback('daily-sales', DorsoftAPI.getDailySales, DEMO_DAILY_SALES),
+    demoFallback('daily-sales', ZofAPI.getDailySales, DEMO_DAILY_SALES),
     30000
   );
 
   const { data: topProducts, isLoading: loadingTop } = useApiPolling(
     'top-products',
-    demoFallback('top-products', DorsoftAPI.getTopProducts, DEMO_TOP_PRODUCTS),
+    demoFallback('top-products', ZofAPI.getTopProducts, DEMO_TOP_PRODUCTS),
     30000
   );
 
   const { data: locations, isLoading: loadingLoc } = useApiPolling(
     'locations',
-    demoFallback('locations', DorsoftAPI.getLocations, DEMO_LOCATIONS),
+    demoFallback('locations', ZofAPI.getLocations, DEMO_LOCATIONS),
     30000
   );
 
   const { data: alerts, isLoading: loadingAlerts } = useApiPolling(
     'alerts',
-    demoFallback('alerts', DorsoftAPI.getAlerts, DEMO_ALERTS),
+    demoFallback('alerts', ZofAPI.getAlerts, DEMO_ALERTS),
     30000
   );
 

@@ -11,7 +11,7 @@
     "typecheck": "tsc -p ./jsconfig.json --noEmit",
     "preview": "vite preview",
     "test": "node test/run.mjs",
-    "server": "node --env-file-if-exists=.env server/index.js",
+    "server": "node --env-file-if-exists=.env server/start.js",
     "server:key": "node server/cli.js key",
     "server:user": "node --env-file-if-exists=.env server/cli.js user",
     "server:cli": "node --env-file-if-exists=.env server/cli.js",

@@ -2,11 +2,14 @@ import { Toaster } from '@/components/ui/toaster';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
+
 import PageNotFound from '@/lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { getApiBaseUrl } from '@/lib/api-service';
 
 import AppLayout from '@/components/layout/AppLayout';
+import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Rame from '@/pages/Rame';
 import Analytics from '@/pages/Analytics';
@@ -30,7 +33,7 @@ const Splash = ({ children }) => (
 );
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, authError } = useAuth();
+  const { isAuthenticated, isLoadingAuth, authError } = useAuth();
 
   if (isLoadingAuth) {
     return (
@@ -41,20 +44,32 @@ const AuthenticatedApp = () => {
     );
   }
 
-  if (authError?.type === 'user_not_registered') {
-    return <UserNotRegisteredError />;
+  // Server oprit sau inaccesibil. Ecranul de login ar fi minciuna aici — nu ai
+  // cu ce sa te autentifici, problema nu e la parola.
+  if (authError?.type === 'server_unreachable') {
+    return (
+      <Splash>
+        <AlertTriangle className="w-6 h-6 text-amber-500" />
+        <p className="text-sm font-semibold">Serverul nu răspunde</p>
+        <p className="text-xs text-muted-foreground">
+          Nu pot contacta <code className="font-mono">{getApiBaseUrl()}</code>.
+          Pornește-l cu <code className="font-mono">npm run server</code>.
+        </p>
+      </Splash>
+    );
   }
 
-  // Providerul local refuza sa porneasca in build de productie (fail closed).
-  // Pana exista un provider server-side, asta e ecranul corect de afisat.
   if (authError) {
     return (
       <Splash>
-        <p className="text-sm font-semibold">Autentificare indisponibilă</p>
+        <AlertTriangle className="w-6 h-6 text-destructive" />
+        <p className="text-sm font-semibold">Eroare de autentificare</p>
         <p className="text-xs text-muted-foreground">{authError.message}</p>
       </Splash>
     );
   }
+
+  if (!isAuthenticated) return <Login />;
 
   return (
     <Routes>

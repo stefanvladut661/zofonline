@@ -5,13 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
-
-const LOCATIONS = [
-  { id: 'arges-mall', name: 'Argeș Mall' },
-  { id: 'exercitiu', name: 'Exercițiu' },
-  { id: 'ic-bratianu', name: 'I.C. Brătianu' },
-  { id: 'zof-ro', name: 'zof.ro (Online)' },
-];
+import { useQuery } from '@tanstack/react-query';
+import { ZofAPI } from '@/lib/api-service';
 
 const SOURCE_TYPES = [
   { value: 'dorsoft', label: 'Dorsoft' },
@@ -23,9 +18,17 @@ const SOURCE_TYPES = [
 export default function AddConnectorDialog({ open, onClose, onSubmit, saving }) {
   const [form, setForm] = useState({ name: '', connectorId: '', locationId: '', sourceType: 'dorsoft' });
 
+  // Locatiile erau hardcodate in acest fisier. Acum vin de la server, ca sa nu
+  // poti asigna un agent unei locatii care nu exista in baza.
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations-admin'],
+    queryFn: () => ZofAPI.admin.listLocations(),
+    enabled: open,
+  });
+
   const handleSubmit = () => {
     if (!form.name || !form.connectorId || !form.locationId) return;
-    const loc = LOCATIONS.find(l => l.id === form.locationId);
+    const loc = locations.find(l => l.id === form.locationId);
     onSubmit({ ...form, locationName: loc?.name || form.locationId });
   };
 
@@ -49,9 +52,15 @@ export default function AddConnectorDialog({ open, onClose, onSubmit, saving }) 
           <div>
             <Label className="text-xs">Locație</Label>
             <Select value={form.locationId} onValueChange={v => set('locationId', v)}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Selectează locație" /></SelectTrigger>
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder={locations.length ? 'Selectează locație' : 'Nicio locație definită'} />
+              </SelectTrigger>
               <SelectContent>
-                {LOCATIONS.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                {locations.map(l => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}{l.type === 'online' ? ' (Online)' : ''}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

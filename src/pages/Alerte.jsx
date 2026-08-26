@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
-import { DorsoftAPI } from '@/lib/api-service';
+import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_ALERTS } from '@/lib/demo-data';
 import { timeAgo } from '@/lib/format';
@@ -53,7 +53,7 @@ export default function Alerte() {
 
   const { data: alerts, isLoading } = useApiPolling(
     'alerts',
-    demoFallback('alerts', DorsoftAPI.getAlerts, DEMO_ALERTS),
+    demoFallback('alerts', ZofAPI.getAlerts, DEMO_ALERTS),
     15000);
 
   const filtered = (alerts || []).filter(a => {
