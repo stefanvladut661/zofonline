@@ -13,8 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { 
-  Wifi, WifiOff, Settings, Globe, Clock, Database,
-  CheckCircle, XCircle, Loader2, Save, RefreshCw, MapPin
+  Wifi, Globe, Database,
+  CheckCircle, XCircle, Loader2, Save, MapPin
 } from 'lucide-react';
 
 export default function Setari() {

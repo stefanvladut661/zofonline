@@ -7,8 +7,8 @@ import EventLogTable from '@/components/conectori/EventLogTable';
 import { useUserRole } from '@/lib/hooks/useUserRole';
 import { db } from '@/lib/data';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createConnector, deleteConnector, checkConnectorStatuses, buildHealthResponse, buildConnectorsResponse } from '@/lib/connector-service';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createConnector, deleteConnector, checkConnectorStatuses, buildHealthResponse } from '@/lib/connector-service';
 import { DorsoftAPI, getApiBaseUrl } from '@/lib/api-service';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Plus, Server, Activity, Database, RefreshCw,
-  CheckCircle, XCircle, Loader2, Eye, EyeOff, Zap
+  CheckCircle, XCircle, Eye, EyeOff, Zap
 } from 'lucide-react';
 
 export default function Conectori() {

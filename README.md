@@ -1,41 +1,84 @@
-const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+# Zof Stoc Online
 
-**Welcome to your Base44 project** 
+Dashboard centralizat de stocuri și vânzări pentru clinica oftalmologică
+**Zof Optogerman**. Scopul complet, constrângerile și roadmap-ul sunt în
+[`plan.md`](./plan.md) — citește-l înainte de orice modificare.
 
-**About**
+## Stack
 
-View and Edit  your app on [db.com](http://db.com) 
+React 18 · Vite 6 · Tailwind 3 · shadcn/ui · React Router 6 · TanStack Query 5 ·
+Recharts · Framer Motion
 
-This project contains everything you need to run your app locally.
+Fără backend extern. Proiectul a fost generat inițial în Base44 și a fost
+**detașat complet** de el; nu mai există niciun SDK proprietar în dependențe.
 
-**Edit the code in your local development environment**
+## Rulare
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
-
-**Prerequisites:** 
-
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
-
-```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.db.app
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # build de producție în dist/
+npm test         # suita de teste (strat de date + indicator date demo)
+npm run lint     # eslint
 ```
 
-Run the app: `npm run dev`
+Nu e nevoie de `.env` momentan.
 
-**Publish your changes**
+## Structură
 
-Open [db.com](http://db.com) and click on Publish.
+```
+src/
+  pages/              cele 10 ecrane rutate
+  components/
+    ui/               primitive shadcn + PageHeader, StatCard, LiveBadge
+    dashboard/        cardurile de pe Dashboard
+    conectori/        UI-ul de management al agenților
+    layout/           AppLayout, Sidebar, MobileNav, DemoDataBanner
+  lib/
+    data/             ► stratul de date (vezi mai jos)
+    auth/             providerul de sesiune
+    hooks/            useApiPolling, useTheme, useUserRole
+    api-service.js    clientul HTTP către bridge-ul Dorsoft
+    data-source.js    urmărește ce ecran e pe date reale vs demo
+    demo-data.js      date de test pentru dezvoltare
+test/                 suita de teste + runner
+```
 
-**Docs & Support**
+## Stratul de date
 
-Documentation: [https://docs.db.com/Integrations/Using-GitHub](https://docs.db.com/Integrations/Using-GitHub)
+Tot ce ține de persistență trece prin `src/lib/data/`. Restul aplicației
+importă `db` din `@/lib/data` și nu știe ce e dedesubt.
 
-Support: [https://app.db.com/support](https://app.db.com/support)
+| fișier | rol |
+|---|---|
+| `schema.js` | definițiile entităților — validare, defaults, minimizare GDPR |
+| `store.js` | repository peste schemă (`list` / `filter` / `get` / `create` / `update` / `delete`) |
+| `adapters/local.js` | persistență pe localStorage — **activ acum** |
+| `adapters/http.js` | contractul REST către backend-ul central — pregătit, necablat |
+| `index.js` | **punctul unic de swap** între adaptoare |
+
+Când backend-ul central e gata (Faza 1 din `plan.md`), se schimbă o singură
+linie în `src/lib/data/index.js`. Paginile nu se ating.
+
+> ⚠️ Adaptorul local ține datele **doar în browserul curent**. Nu e sursă de
+> adevăr pentru stoc și vânzări și nu va deveni.
+
+## Autentificare
+
+`src/lib/auth/session.js` e un provider **local, de dezvoltare** — nu verifică
+nicio parolă și nu vorbește cu niciun server. În build de producție refuză să
+pornească (fail closed), tocmai ca să nu ajungă din greșeală pe un domeniu
+public. Se înlocuiește cu un provider server-side la Faza 1.
+
+## Date demo
+
+Ecranele cad pe `demo-data.js` când bridge-ul nu răspunde. Când se întâmplă
+asta, un banner permanent și indicatorul din antet spun explicit că cifrele
+sunt inventate — vezi `src/lib/data-source.js`. Nu se poate închide,
+intenționat.
+
+## Stadiu
+
+Fazele 0–4 din planul de acțiune sunt gata: audit, restructurare, detașare de
+Base44, arhitectură proprie, indicator de date demo. Urmează modelul de date
+central și endpoint-ul `/ingest` (Faza 1 din `plan.md`).

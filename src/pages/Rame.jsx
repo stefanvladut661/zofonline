@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_PRODUCTS } from '@/lib/demo-data';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { useUserRole } from '@/lib/hooks/useUserRole';
@@ -21,10 +22,7 @@ export default function Rame() {
 
   const { data: products, isLoading } = useApiPolling(
     'products',
-    async () => {
-      try { return await DorsoftAPI.getProducts(); }
-      catch { return DEMO_PRODUCTS; }
-    },
+    demoFallback('products', DorsoftAPI.getProducts, DEMO_PRODUCTS),
     60000
   );
 

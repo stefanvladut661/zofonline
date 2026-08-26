@@ -3,7 +3,7 @@ import PageHeader from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
-import { FileText, Download, ShoppingBag, Package, BarChart3, TrendingUp, Globe, MapPin } from 'lucide-react';
+import { Download, ShoppingBag, Package, BarChart3, TrendingUp, Globe, MapPin } from 'lucide-react';
 
 const REPORTS = [
   { id: 'sales', title: 'Raport vânzări', description: 'Toate tranzacțiile pe perioadă selectată', icon: ShoppingBag, type: 'CSV / Excel' },

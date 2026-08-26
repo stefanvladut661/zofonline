@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
 import Footer from './Footer';
+import DemoDataBanner from './DemoDataBanner';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,6 +27,7 @@ export default function AppLayout() {
       <main className={`transition-all duration-300 ${
         collapsed ? 'lg:ml-16' : 'lg:ml-60'
       } pt-14 lg:pt-0 pb-20 lg:pb-0 min-h-screen`}>
+        <DemoDataBanner />
         <div className="p-4 lg:p-6 max-w-[1600px] mx-auto">
           <Outlet />
         </div>

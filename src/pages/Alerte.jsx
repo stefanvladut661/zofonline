@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_ALERTS } from '@/lib/demo-data';
 import { timeAgo } from '@/lib/format';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -50,9 +51,10 @@ export default function Alerte() {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const { data: alerts, isLoading } = useApiPolling('alerts', async () => {
-    try { return await DorsoftAPI.getAlerts(); } catch { return DEMO_ALERTS; }
-  }, 15000);
+  const { data: alerts, isLoading } = useApiPolling(
+    'alerts',
+    demoFallback('alerts', DorsoftAPI.getAlerts, DEMO_ALERTS),
+    15000);
 
   const filtered = (alerts || []).filter(a => {
     if (severityFilter !== 'all' && a.severity !== severityFilter) return false;

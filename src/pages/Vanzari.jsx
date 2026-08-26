@@ -2,12 +2,12 @@ import React, { useState, useMemo } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_SALES_JOURNAL } from '@/lib/demo-data';
 import { formatCurrency, timeAgo } from '@/lib/format';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Search, Download, MapPin, Globe, ShoppingBag } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -18,9 +18,10 @@ export default function Vanzari() {
   const [page, setPage] = useState(1);
   const perPage = 20;
 
-  const { data: sales, isLoading } = useApiPolling('sales', async () => {
-    try { return await DorsoftAPI.getSales(); } catch { return DEMO_SALES_JOURNAL; }
-  }, 30000);
+  const { data: sales, isLoading } = useApiPolling(
+    'sales',
+    demoFallback('sales', DorsoftAPI.getSales, DEMO_SALES_JOURNAL),
+    30000);
 
   const filtered = useMemo(() => {
     let items = [...(sales || [])];

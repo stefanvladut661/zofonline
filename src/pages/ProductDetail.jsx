@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import PageHeader from '@/components/ui/PageHeader';
 import StatCard from '@/components/ui/StatCard';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_PRODUCTS, DEMO_DAILY_SALES } from '@/lib/demo-data';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { useUserRole } from '@/lib/hooks/useUserRole';
@@ -19,15 +19,17 @@ export default function ProductDetail() {
   const sku = window.location.pathname.split('/rame/')[1];
   const { isAdmin } = useUserRole();
 
-  const { data: products } = useApiPolling('products-detail', async () => {
-    try { return await DorsoftAPI.getProducts(); } catch { return DEMO_PRODUCTS; }
-  }, 60000);
+  const { data: products } = useApiPolling(
+    'products-detail',
+    demoFallback('products-detail', DorsoftAPI.getProducts, DEMO_PRODUCTS),
+    60000);
 
   const product = (products || []).find(p => p.sku === sku);
 
-  const { data: salesData } = useApiPolling('product-sales', async () => {
-    try { return await DorsoftAPI.getDailySales(); } catch { return DEMO_DAILY_SALES; }
-  }, 60000);
+  const { data: salesData } = useApiPolling(
+    'product-sales',
+    demoFallback('product-sales', DorsoftAPI.getDailySales, DEMO_DAILY_SALES),
+    60000);
 
   if (!product) {
     return (

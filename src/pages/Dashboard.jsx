@@ -7,51 +7,37 @@ import LocationsOverview from '@/components/dashboard/LocationsOverview';
 import AlertsPreview from '@/components/dashboard/AlertsPreview';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_DASHBOARD, DEMO_DAILY_SALES, DEMO_TOP_PRODUCTS, DEMO_LOCATIONS, DEMO_ALERTS } from '@/lib/demo-data';
 
 export default function Dashboard() {
   const { data: dashData, isLoading: loadingDash } = useApiPolling(
-    'dashboard', 
-    async () => {
-      try { return await DorsoftAPI.getDashboard(); } 
-      catch { return DEMO_DASHBOARD; }
-    }, 
+    'dashboard',
+    demoFallback('dashboard', DorsoftAPI.getDashboard, DEMO_DASHBOARD),
     15000
   );
 
   const { data: dailySales, isLoading: loadingSales } = useApiPolling(
-    'daily-sales', 
-    async () => {
-      try { return await DorsoftAPI.getDailySales(); } 
-      catch { return DEMO_DAILY_SALES; }
-    }, 
+    'daily-sales',
+    demoFallback('daily-sales', DorsoftAPI.getDailySales, DEMO_DAILY_SALES),
     30000
   );
 
   const { data: topProducts, isLoading: loadingTop } = useApiPolling(
-    'top-products', 
-    async () => {
-      try { return await DorsoftAPI.getTopProducts(); } 
-      catch { return DEMO_TOP_PRODUCTS; }
-    }, 
+    'top-products',
+    demoFallback('top-products', DorsoftAPI.getTopProducts, DEMO_TOP_PRODUCTS),
     30000
   );
 
   const { data: locations, isLoading: loadingLoc } = useApiPolling(
-    'locations', 
-    async () => {
-      try { return await DorsoftAPI.getLocations(); } 
-      catch { return DEMO_LOCATIONS; }
-    }, 
+    'locations',
+    demoFallback('locations', DorsoftAPI.getLocations, DEMO_LOCATIONS),
     30000
   );
 
   const { data: alerts, isLoading: loadingAlerts } = useApiPolling(
-    'alerts', 
-    async () => {
-      try { return await DorsoftAPI.getAlerts(); } 
-      catch { return DEMO_ALERTS; }
-    }, 
+    'alerts',
+    demoFallback('alerts', DorsoftAPI.getAlerts, DEMO_ALERTS),
     30000
   );
 

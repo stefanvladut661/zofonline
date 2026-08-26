@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
+import { demoFallback } from '@/lib/data-source';
 import { DEMO_MONTHLY_SALES, DEMO_BRANDS, DEMO_CATEGORIES, DEMO_PERFORMANCE } from '@/lib/demo-data';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 import { motion } from 'framer-motion';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 
 const CHART_COLORS = [
@@ -44,21 +45,25 @@ function ChartCard({ title, children, className = '' }) {
 }
 
 export default function Analytics() {
-  const { data: monthlySales } = useApiPolling('monthly-sales', async () => {
-    try { return await DorsoftAPI.getMonthlySales(); } catch { return DEMO_MONTHLY_SALES; }
-  }, 60000);
+  const { data: monthlySales } = useApiPolling(
+    'monthly-sales',
+    demoFallback('monthly-sales', DorsoftAPI.getMonthlySales, DEMO_MONTHLY_SALES),
+    60000);
 
-  const { data: brands } = useApiPolling('brands', async () => {
-    try { return await DorsoftAPI.getBrands(); } catch { return DEMO_BRANDS; }
-  }, 60000);
+  const { data: brands } = useApiPolling(
+    'brands',
+    demoFallback('brands', DorsoftAPI.getBrands, DEMO_BRANDS),
+    60000);
 
-  const { data: categories } = useApiPolling('categories', async () => {
-    try { return await DorsoftAPI.getCategories(); } catch { return DEMO_CATEGORIES; }
-  }, 60000);
+  const { data: categories } = useApiPolling(
+    'categories',
+    demoFallback('categories', DorsoftAPI.getCategories, DEMO_CATEGORIES),
+    60000);
 
-  const { data: performance } = useApiPolling('performance', async () => {
-    try { return await DorsoftAPI.getPerformance(); } catch { return DEMO_PERFORMANCE; }
-  }, 60000);
+  const { data: performance } = useApiPolling(
+    'performance',
+    demoFallback('performance', DorsoftAPI.getPerformance, DEMO_PERFORMANCE),
+    60000);
 
   const onlineVsFizic = performance?.online_vs_fizic 
     ? [

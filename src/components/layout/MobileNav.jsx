@@ -7,7 +7,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { 
   LayoutDashboard, Glasses, BarChart3, ShoppingCart, 
-  Globe, FileText, Bell, Settings, Menu, X,
+  Globe, FileText, Bell, Settings, Menu,
   Moon, Sun, LogOut, Server
 } from 'lucide-react';
 

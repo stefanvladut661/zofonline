@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Globe, TrendingUp } from 'lucide-react';
+import { MapPin, Globe } from 'lucide-react';
 import { formatCurrency, formatNumber } from '@/lib/format';
 
 export default function LocationsOverview({ locations, loading }) {
