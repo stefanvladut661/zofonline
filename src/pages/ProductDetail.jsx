@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import StatCard from '@/components/ui/StatCard';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { DorsoftAPI } from '@/lib/api-service';
@@ -15,8 +15,10 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 export default function ProductDetail() {
   const navigate = useNavigate();
-  const urlParams = new URLSearchParams(window.location.search);
-  const sku = window.location.pathname.split('/rame/')[1];
+  // Ruta e declarata ca /rame/:sku, deci luam parametrul de la router.
+  // Inainte se parsa window.location.pathname de mana: nu reactiona la
+  // schimbarea rutei si arunca in orice context fara `window`.
+  const { sku } = useParams();
   const { isAdmin } = useUserRole();
 
   const { data: products } = useApiPolling(
