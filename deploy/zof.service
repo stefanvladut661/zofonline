@@ -1,0 +1,45 @@
+# Serviciul backend Zof, pornit si supravegheat de systemd.
+#
+# Instalare:
+#   sudo cp zof.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now zof
+
+[Unit]
+Description=Zof Stoc Online — backend
+Documentation=file:/opt/zof/server/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zof
+Group=zof
+WorkingDirectory=/opt/zof
+
+# Backend-ul nu are nicio dependenta npm — doar module native Node.
+ExecStart=/usr/bin/node --env-file-if-exists=/opt/zof/.env /opt/zof/server/start.js
+
+# Daca pica, revine singur. Fara asta, o eroare la 3 dimineata inseamna
+# dashboard mort pana cand observa cineva.
+Restart=always
+RestartSec=5
+
+Environment=NODE_ENV=production
+
+# Serviciul vede sistemul doar in citire si poate scrie exclusiv in folderul
+# de date. Chiar daca cineva ar gasi o bresa in server, nu are unde sa scrie.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/zof/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zof
+
+[Install]
+WantedBy=multi-user.target

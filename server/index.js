@@ -13,6 +13,11 @@ import * as dash from './routes/dashboard.js';
 import * as admin from './routes/admin.js';
 
 const PORT = Number(process.env.PORT) || 3001;
+
+// Pe ce interfata ascultam. Implicit toate, ca sa mearga fara configurare in
+// dezvoltare. In productie punem ZOF_HOST=127.0.0.1: Caddy e singurul care
+// trebuie sa ajunga la Node, iar portul nu mai e expus deloc spre exterior.
+const HOST = process.env.ZOF_HOST || '0.0.0.0';
 const IS_PROD = process.env.NODE_ENV === 'production';
 const CORS_ORIGINS = (process.env.ZOF_CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175')
   .split(',').map((s) => s.trim()).filter(Boolean);
@@ -151,7 +156,7 @@ export function createServer() {
   });
 }
 
-export function startServer({ port = PORT } = {}) {
+export function startServer({ port = PORT, host = HOST } = {}) {
   if (!process.env.ZOF_SECRET_KEY) {
     console.error(
       '\nZOF_SECRET_KEY lipseste din mediu. Genereaza una si pune-o in .env:\n' +
@@ -187,8 +192,9 @@ export function startServer({ port = PORT } = {}) {
     throw err;
   });
 
-  server.listen(port, () => {
+  server.listen(port, host, () => {
     console.log(`\n  Zof API  →  http://localhost:${port}`);
+    console.log(`  Ascult   →  ${host}`);
     console.log(`  CORS     →  ${CORS_ORIGINS.join(', ')}`);
     console.log(`  Mediu    →  ${IS_PROD ? 'productie' : 'dezvoltare'}\n`);
   });

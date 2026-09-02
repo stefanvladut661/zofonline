@@ -1,0 +1,40 @@
+# Caddy — dashboard + API pe acelasi domeniu.
+#
+# Fiind acelasi domeniu, browserul nu mai face cereri "cross-origin": problema
+# de CORS dispare complet, iar cookie-ul de sesiune merge fara setari speciale.
+#
+# Caddy cere si reinnoieste singur certificatul HTTPS de la Let's Encrypt.
+# Conditii: portul 80 si 443 deschise, iar domeniul sa arate deja spre IP-ul VM-ului.
+#
+# Inlocuieste stoc.zof.ro cu domeniul tau real, apoi:
+#   sudo cp Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+
+stoc.zof.ro {
+	encode zstd gzip
+
+	# API-ul: mai departe catre Node, care asculta doar pe interfata locala.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3011
+	}
+
+	# Dashboard-ul: fisiere statice construite pe calculatorul tau.
+	handle {
+		root * /opt/zof/dist
+		# Dashboard-ul isi gestioneaza singur rutele; orice adresa necunoscuta
+		# primeste index.html, altfel un refresh pe /rapoarte ar da 404.
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Fisierele cu amprenta in nume nu se schimba niciodata sub acelasi nume,
+	# deci pot fi tinute in cache un an. Economiseste din traficul lunar gratuit.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	log {
+		output file /var/log/caddy/zof.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
