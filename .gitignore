@@ -34,3 +34,6 @@ test/.build/
 
 # baza de date locala a serverului
 server/data/
+
+# payload-uri si rapoarte de dry-run ale puntii
+bridge/out/

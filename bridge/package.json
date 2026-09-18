@@ -1,0 +1,15 @@
+{
+  "name": "zof-dorsoft-bridge",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Puntea DorSoft (export JSON) -> serverul Zof Stoc Online. Fara dependente.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dry-run": "node dorsoft-bridge.mjs --dry-run",
+    "send": "node dorsoft-bridge.mjs --send",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

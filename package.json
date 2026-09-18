@@ -15,7 +15,10 @@
     "server:key": "node server/cli.js key",
     "server:user": "node --env-file-if-exists=.env server/cli.js user",
     "server:cli": "node --env-file-if-exists=.env server/cli.js",
-    "test:server": "node --env-file-if-exists=.env test/server.test.js"
+    "test:server": "node --env-file-if-exists=.env test/server.test.js",
+    "bridge:dry-run": "node bridge/dorsoft-bridge.mjs --dry-run",
+    "bridge:send": "node bridge/dorsoft-bridge.mjs --send",
+    "test:bridge": "node --test \"bridge/test/*.test.mjs\""
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
