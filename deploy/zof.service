@@ -25,6 +25,10 @@ Restart=always
 RestartSec=5
 
 Environment=NODE_ENV=production
+# Dashboard-ul calculeaza „azi", saptamana si ora dupa ceasul serverului
+# (SQLite localtime). VM-ul din Google Cloud e pe UTC; fara linia asta, un bon
+# dat la 00:30 in Romania ar aparea in ziua precedenta.
+Environment=TZ=Europe/Bucharest
 
 # Serviciul vede sistemul doar in citire si poate scrie exclusiv in folderul
 # de date. Chiar daca cineva ar gasi o bresa in server, nu are unde sa scrie.

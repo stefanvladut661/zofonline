@@ -37,3 +37,6 @@ server/data/
 
 # payload-uri si rapoarte de dry-run ale puntii
 bridge/out/
+
+# exporturi DorSoft (date reale de vanzari) - raman doar local
+generated-json/

@@ -1,89 +1,127 @@
-<#
+﻿<#
 ============================================================
- publica.ps1 — trimite versiunea curenta pe server.
+ publica.ps1 - trimite versiunea curenta pe VM, cu o singura comanda.
  Se ruleaza de pe calculatorul tau, din radacina proiectului:
 
-   .\deploy\publica.ps1                  # dashboard + backend
-   .\deploy\publica.ps1 -DoarDashboard   # doar interfata (mai rapid)
+   .\deploy\publica.ps1                  # dashboard + backend + punte
+   .\deploy\publica.ps1 -DoarDashboard   # doar interfata (nu reporneste serverul)
+   .\deploy\publica.ps1 -Simuleaza       # construieste si impacheteaza, NU urca nimic
 
- Construieste dashboard-ul local si urca doar rezultatul. Motivul:
- masina de pe Google Cloud are 1 GB de RAM si un build de Vite ar
- ramane fara memorie acolo. Backend-ul nu are dependente npm, deci
- pe server nu se instaleaza absolut nimic.
+ Merge prin `gcloud compute ssh/scp`, nu prin ssh direct: gcloud isi face
+ singur cheia SSH si o inregistreaza pe VM (ssh-ul simplu dadea
+ "Permission denied (publickey)").
 
- Nu atinge NICIODATA baza de date (/opt/zof/data) si nici
- configurarea cu secretul (/opt/zof/.env).
+ Construieste dashboard-ul local si urca doar rezultatul: VM-ul are 1 GB
+ de RAM si un build de Vite ar ramane fara memorie acolo. Backend-ul si
+ puntea nu au dependente npm, deci pe server nu se instaleaza nimic.
+
+ Nu atinge NICIODATA: /opt/zof/data (baza), /opt/zof/.env (secretul),
+ /opt/zof/bridge/.env (cheile puntii), /opt/zof/bridge/out (rapoartele).
 ============================================================
 #>
 param(
     [switch]$DoarDashboard,
-    [string]$Tinta = $env:ZOF_SSH   # ex. "vlad@34.121.4.55"
+    [switch]$Simuleaza,
+    [string]$Instanta   = $(if ($env:ZOF_VM)      { $env:ZOF_VM }      else { 'zofonline' }),
+    [string]$Zona       = $(if ($env:ZOF_ZONE)    { $env:ZOF_ZONE }    else { 'us-central1-a' }),
+    [string]$Proiect    = $(if ($env:ZOF_PROJECT) { $env:ZOF_PROJECT } else { 'project-c273e04c-74d3-4493-a9e' }),
+    [string]$Utilizator = $(if ($env:ZOF_VM_USER) { $env:ZOF_VM_USER } else { 'driveagency001' }),
+    [string]$Domeniu    = $(if ($env:ZOF_DOMENIU) { $env:ZOF_DOMENIU } else { 'stoc.zof.ro' })
 )
 
-$ErrorActionPreference = 'Stop'
+# 'Continue', nu 'Stop': npm/vite/gcloud scriu si pe stderr fara sa fie erori,
+# iar PowerShell 5.1 le-ar transforma in exceptii. Verificam noi $LASTEXITCODE.
+$ErrorActionPreference = 'Continue'
+$Tinta = "$Utilizator@$Instanta"
+$Gcloud = @('--zone', $Zona, '--project', $Proiect, '--quiet')
 
-if (-not $Tinta) {
-    Write-Host "Nu stiu unde sa public." -ForegroundColor Red
-    Write-Host "Spune-mi serverul, o singura data:"
-    Write-Host '  [Environment]::SetEnvironmentVariable("ZOF_SSH", "utilizator@IP", "User")'
-    Write-Host "sau de fiecare data:  .\deploy\publica.ps1 -Tinta utilizator@IP"
-    exit 1
-}
+function Pas($text) { Write-Host "==> $text" -ForegroundColor Cyan }
+function Esec($text) { Write-Host "EROARE: $text" -ForegroundColor Red; exit 1 }
 
 $Radacina = Split-Path $PSScriptRoot -Parent
 Set-Location $Radacina
 
+# --- 0. Verificari inainte sa facem ceva ----------------------------------
+if (-not $Simuleaza) {
+    if (-not (Get-Command gcloud -ErrorAction SilentlyContinue)) {
+        Esec "gcloud nu e instalat. Instaleaza Google Cloud SDK (cloud.google.com/sdk) si ruleaza 'gcloud auth login'."
+    }
+    $cont = gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>$null
+    if (-not $cont) { Esec "gcloud nu e autentificat. Ruleaza: gcloud auth login" }
+    Write-Host "Cont gcloud: $cont  |  VM: $Tinta ($Zona, $Proiect)"
+}
+
 # --- 1. Construim dashboard-ul --------------------------------------------
-# "/api" (adresa relativa) inseamna ca interfata cere date de la acelasi
-# domeniu de pe care e servita. Asa nu exista cereri cross-origin.
-Write-Host "==> Construiesc dashboard-ul..." -ForegroundColor Cyan
-$env:VITE_API_BASE_URL = "/api"
+# "/api" (adresa relativa): interfata cere date de la acelasi domeniu de pe
+# care e servita, deci nu exista cereri cross-origin.
+Pas "Construiesc dashboard-ul (npm run build)..."
+$env:VITE_API_BASE_URL = '/api'
 npm run build
-if ($LASTEXITCODE -ne 0) { throw "Build-ul a esuat. Nu public nimic." }
+if ($LASTEXITCODE -ne 0) { Esec "Build-ul a esuat. Nu public nimic." }
 
 # --- 2. Impachetam --------------------------------------------------------
-$Arhiva = Join-Path $env:TEMP "zof-deploy.tgz"
-$DeUrcat = if ($DoarDashboard) { @('dist') } else { @('dist', 'server') }
+$Arhiva = Join-Path $env:TEMP 'zof-deploy.tgz'
+$DeUrcat = if ($DoarDashboard) { @('dist') } else { @('dist', 'server', 'bridge') }
 
-Write-Host "==> Impachetez: $($DeUrcat -join ', ')" -ForegroundColor Cyan
-# Excludem server/data: pe server acolo NU e nimic (baza sta in /opt/zof/data),
-# dar daca ai o baza locala de test nu vrem sa plece spre productie.
-tar -czf $Arhiva --exclude='server/data' --exclude='*.map' $DeUrcat
-if ($LASTEXITCODE -ne 0) { throw "Impachetarea a esuat." }
+Pas "Impachetez: $($DeUrcat -join ', ')"
+# Excluderi: baza locala de test, fisierele .env si secretele puntii, rapoartele,
+# source maps (nu au ce cauta in productie).
+$Excluderi = @(
+    '--exclude=server/data', '--exclude=server/.env',
+    '--exclude=bridge/.env', '--exclude=bridge/out', '--exclude=bridge/node_modules',
+    '--exclude=*.map'
+)
+tar -czf $Arhiva @Excluderi @DeUrcat
+if ($LASTEXITCODE -ne 0) { Esec "Impachetarea a esuat." }
 
-$Marime = "{0:N1} MB" -f ((Get-Item $Arhiva).Length / 1MB)
-Write-Host "    $Marime"
+$Marime = '{0:N1} MB' -f ((Get-Item $Arhiva).Length / 1MB)
+Write-Host "    $Arhiva ($Marime)"
 
-# --- 3. Urcam si instalam -------------------------------------------------
-Write-Host "==> Urc pe $Tinta..." -ForegroundColor Cyan
-scp -q $Arhiva "${Tinta}:/tmp/zof-deploy.tgz"
-if ($LASTEXITCODE -ne 0) { throw "Urcarea a esuat. Verifica accesul SSH." }
+# Plasa de siguranta: nu plecam cu vreun .env sau baza de date in arhiva.
+$Continut = tar -tzf $Arhiva
+$Interzis = $Continut | Where-Object { $_ -match '(^|/)\.env($|\.)' -or $_ -match '\.db(-wal|-shm)?$' -or $_ -match '^bridge/out/' }
+if ($Interzis) { Esec "Arhiva contine fisiere care nu trebuie sa plece: $($Interzis -join ', ')" }
 
-# Dezarhivam peste cod, repornim serviciul si verificam ca a revenit.
+if ($Simuleaza) {
+    Write-Host "==> Simulare: nimic nu a fost urcat. Arhiva ramane la $Arhiva pentru inspectie." -ForegroundColor Yellow
+    Write-Host "    ($($Continut.Count) intrari)"
+    exit 0
+}
+
+# --- 3. Urcam pe VM -------------------------------------------------------
+Pas "Urc pe $Tinta..."
+gcloud compute scp @Gcloud $Arhiva "${Tinta}:/tmp/zof-deploy.tgz"
+if ($LASTEXITCODE -ne 0) { Esec "Urcarea a esuat. Verifica: gcloud compute ssh $Tinta --zone $Zona" }
+
+# --- 4. Instalam si repornim ----------------------------------------------
+# dist/ e inlocuit complet (fisierele vechi cu hash nu se mai aduna);
+# server/ si bridge/ sunt suprascrise fisier cu fisier, .env-urile raman.
 $Comenzi = @(
     'set -e',
+    'cd /opt/zof',
+    'sudo rm -rf /opt/zof/dist',
     'sudo tar -xzf /tmp/zof-deploy.tgz -C /opt/zof',
-    'sudo chown -R zof:zof /opt/zof/dist /opt/zof/server',
+    'sudo chown -R zof:zof /opt/zof/dist' + $(if (-not $DoarDashboard) { ' /opt/zof/server /opt/zof/bridge' } else { '' }),
     'rm -f /tmp/zof-deploy.tgz',
-    $(if ($DoarDashboard) { 'echo "Backend neatins."' } else { 'sudo systemctl restart zof' }),
+    $(if ($DoarDashboard) { 'echo "Backend neatins (doar dashboard)."' } else { 'sudo systemctl restart zof' }),
     'sleep 2',
-    'systemctl is-active --quiet zof && echo "Serviciul ruleaza." || (echo "SERVICIUL NU A PORNIT:"; sudo journalctl -u zof -n 30 --no-pager; exit 1)'
-) -join '; '
+    'if systemctl is-active --quiet zof; then echo "Serviciul zof ruleaza."; else echo "SERVICIUL NU A PORNIT - ultimele linii din jurnal:"; sudo journalctl -u zof -n 30 --no-pager; exit 1; fi'
+) -join ' && '
 
-ssh $Tinta $Comenzi
-if ($LASTEXITCODE -ne 0) { throw "Instalarea pe server a esuat (vezi mesajele de mai sus)." }
+Pas "Instalez si repornesc serviciul..."
+gcloud compute ssh @Gcloud $Tinta --command $Comenzi
+if ($LASTEXITCODE -ne 0) { Esec "Instalarea pe server a esuat (vezi mesajele de mai sus). Codul vechi poate fi partial suprascris - ruleaza din nou dupa ce rezolvi cauza." }
 
-Remove-Item $Arhiva -Force
+Remove-Item $Arhiva -Force -ErrorAction SilentlyContinue
 
-# --- 4. Verificare finala din exterior ------------------------------------
-$Domeniu = ssh $Tinta "grep -m1 -oP '^\S+(?= \{)' /etc/caddy/Caddyfile"
-if ($Domeniu) {
-    try {
-        $stare = Invoke-RestMethod -Uri "https://$Domeniu/api/health" -TimeoutSec 15
-        Write-Host "==> https://$Domeniu raspunde: $($stare.status), $($stare.connectors_online)/$($stare.connectors_total) agenti online" -ForegroundColor Green
-    } catch {
-        Write-Host "==> Serviciul ruleaza, dar https://$Domeniu/api/health nu raspunde: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
+# --- 5. Verificare finala din exterior ------------------------------------
+Pas "Verific https://$Domeniu/api/health ..."
+try {
+    $stare = Invoke-RestMethod -Uri "https://$Domeniu/api/health" -TimeoutSec 20
+    Write-Host "==> https://$Domeniu raspunde: $($stare.status), $($stare.connectors_online)/$($stare.connectors_total) agenti online" -ForegroundColor Green
+} catch {
+    Write-Host "==> Serviciul ruleaza pe VM, dar https://$Domeniu/api/health nu raspunde de aici: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "    Verifica pe VM:  gcloud compute ssh $Tinta --zone $Zona --command 'curl -s http://127.0.0.1:3011/api/health'"
 }
 
 Write-Host "Gata." -ForegroundColor Green

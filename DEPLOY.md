@@ -95,12 +95,16 @@ Instalează Node 24 și Caddy, creează utilizatorul `zof` și folderele, genere
 ## 5. Prima publicare
 
 ```powershell
-[Environment]::SetEnvironmentVariable("ZOF_SSH", "<tinta>", "User")
 .\deploy\publica.ps1
 ```
 
-Construiește dashboard-ul local, îl urcă împreună cu backend-ul, repornește
-serviciul și verifică la final că `https://stoc.zof.ro/api/health` răspunde.
+Construiește dashboard-ul local, îl urcă împreună cu backend-ul și puntea prin
+`gcloud compute scp/ssh`, repornește serviciul și verifică la final că
+`https://stoc.zof.ro/api/health` răspunde. VM-ul, zona, proiectul și
+utilizatorul sunt scrise în script (`zofonline`, `us-central1-a`,
+`driveagency001`) și pot fi schimbate cu `-Instanta`, `-Zona`, `-Proiect`,
+`-Utilizator` sau prin variabilele `ZOF_VM`, `ZOF_ZONE`, `ZOF_PROJECT`,
+`ZOF_VM_USER`.
 
 ## 6. Contul și agenții
 
@@ -156,12 +160,14 @@ liniște completă, adu periodic o copie pe calculatorul tău cu comanda de mai 
 ## Publicarea unei modificări
 
 ```powershell
-.\deploy\publica.ps1                  # dashboard + backend
-.\deploy\publica.ps1 -DoarDashboard   # doar interfața, mai rapid
+.\deploy\publica.ps1                  # dashboard + backend + punte
+.\deploy\publica.ps1 -DoarDashboard   # doar interfața, fără repornirea serverului
+.\deploy\publica.ps1 -Simuleaza       # construiește și împachetează, nu urcă nimic
 ```
 
-Publicarea nu atinge niciodată `/opt/zof/data` (baza) și nici `/opt/zof/.env`
-(secretul). Codul e înlocuit, datele rămân.
+Publicarea nu atinge niciodată `/opt/zof/data` (baza), `/opt/zof/.env`
+(secretul), `/opt/zof/bridge/.env` (cheile punții) și `/opt/zof/bridge/out`
+(rapoartele). Codul e înlocuit, datele rămân.
 
 ---
 
