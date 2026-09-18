@@ -1,11 +1,12 @@
 import React from 'react';
-import PageHeader from '@/components/ui/PageHeader';
+import PageHeader, { freshnessOf } from '@/components/ui/PageHeader';
 import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_SHOPIFY_ORDERS, DEMO_DASHBOARD } from '@/lib/demo-data';
-import { formatCurrency, timeAgo } from '@/lib/format';
+import { formatCurrency, formatPercent, formatDateRange, timeAgo } from '@/lib/format';
 import StatCard from '@/components/ui/StatCard';
+import EmptyState from '@/components/EmptyState';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 import { Globe, Package, Clock, CheckCircle, Truck, ShoppingBag, DollarSign, TrendingUp } from 'lucide-react';
@@ -29,19 +30,36 @@ export default function ComenziOnline() {
 
   const pendingCount = (orders || []).filter(o => o.status === 'pending').length;
 
+  // Cifrele de aici sunt DOAR canalul online, pe luna curenta (ancorata pe
+  // ultima zi raportata). Inainte „Evolutie" lua evolutia TOTALA a magazinului
+  // (evolution_vs_last_month) si o prefixa cu „+" — de-aia aparea „+-26.6%"
+  // desi nu exista nicio comanda online.
+  const month = dash?.period?.month ? formatDateRange(dash.period.month.from, dash.period.month.to) : 'luna curentă';
+  const prevMonth = dash?.period?.prev_month ? formatDateRange(dash.period.prev_month.from, dash.period.prev_month.to) : 'luna trecută';
+  const onlineEvolution = dash?.shopify_evolution_vs_last_month ?? null;
+  const evolutionLabel = onlineEvolution == null
+    ? (dash?.shopify_revenue_prev_month ? 'fără comenzi online' : `fără comenzi online în ${prevMonth}`)
+    : `vs ${prevMonth}`;
+
   return (
     <div className="space-y-5">
-      <PageHeader 
-        title="Comenzi Online" 
+      <PageHeader
+        title="Comenzi Online"
         subtitle="Shopify — zof.ro"
-        lastUpdated={new Date().toISOString()}
+        freshness={freshnessOf(dash)}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard title="Comenzi azi" value={dash?.shopify_orders || 0} icon={ShoppingBag} />
-        <StatCard title="Venit online" value={formatCurrency(dash?.shopify_revenue)} icon={DollarSign} />
+        <StatCard title="Comenzi" value={dash?.shopify_orders || 0} subtitle={month} icon={ShoppingBag} />
+        <StatCard title="Venit online" value={formatCurrency(dash?.shopify_revenue)} subtitle={month} icon={DollarSign} />
         <StatCard title="În așteptare" value={pendingCount} icon={Clock} accentColor="warning" />
-        <StatCard title="Evoluție" value={`+${dash?.evolution_vs_last_month || 0}%`} icon={TrendingUp} />
+        <StatCard
+          title="Evoluție online"
+          value={onlineEvolution == null ? '—' : formatPercent(onlineEvolution)}
+          subtitle={evolutionLabel}
+          icon={TrendingUp}
+          accentColor={onlineEvolution > 0 ? 'success' : onlineEvolution < 0 ? 'destructive' : 'primary'}
+        />
       </div>
 
       <div className="space-y-2">
@@ -49,6 +67,12 @@ export default function ComenziOnline() {
           Array(5).fill(0).map((_, i) => (
             <div key={i} className="glass rounded-xl p-4 h-20 shimmer" />
           ))
+        ) : !orders?.length ? (
+          <EmptyState
+            icon={Globe}
+            title="Nicio comandă online"
+            description="Aici apar comenzile din magazinul online (Shopify) după ce integrarea va fi conectată. Vânzările din magazinele fizice nu se numără aici."
+          />
         ) : (
           (orders || []).map((order, i) => {
             const statusInfo = STATUS_MAP[order.status] || STATUS_MAP.pending;

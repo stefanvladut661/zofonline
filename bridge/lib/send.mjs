@@ -45,8 +45,8 @@ export function signedHeaders({ apiKey, connectorId, body, now = new Date() }) {
  * Vanzarile se taie DOAR intre bonuri (receipt_ref), niciodata in mijlocul
  * unui bon: fiecare cerere e atomica pe server, deci un bon nu ramane pe
  * jumatate daca a doua cerere pica. Produsele merg in prima cerere, iar
- * watermark-ul doar cu ULTIMA — serverul il avanseaza numai dupa ce datele
- * au intrat, deci nu-l marcam "trimis" inainte sa fie tot trimis.
+ * watermark-ul si data fisierului doar cu ULTIMA — serverul le avanseaza numai
+ * dupa ce datele au intrat, deci nu le marcam "trimise" inainte sa fie tot trimis.
  */
 export function chunkPayload(payload) {
   const products = payload.products ?? [];
@@ -77,7 +77,13 @@ export function chunkPayload(payload) {
     const c = { agent_version: payload.agent_version };
     if (productChunks[i]?.length) c.products = productChunks[i];
     if (saleChunks[i]?.length) c.sales = saleChunks[i];
-    if (i === n - 1 && payload.watermark) c.watermark = payload.watermark;
+    if (i === n - 1) {
+      if (payload.watermark) c.watermark = payload.watermark;
+      if (payload.source_file_mtime) {
+        c.source_file_name = payload.source_file_name ?? null;
+        c.source_file_mtime = payload.source_file_mtime;
+      }
+    }
     chunks.push(c);
   }
   return chunks;

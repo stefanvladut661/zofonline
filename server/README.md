@@ -136,6 +136,13 @@ Endpoint-ul principal. Trimite produse, stoc și vânzări într-un singur batch
   "agent_version": "1.0.0",
   "watermark": "2026-08-26T12:00:00.000Z",   // vezi §6
 
+  // Opțional: fișierul de export din care vin datele și data lui (mtime, ISO 8601).
+  // Dashboard-ul afișează „date din <data>" în loc de „Live" — exportul se face
+  // a doua zi, deci cifrele nu sunt niciodată „de acum". Serverul reține doar
+  // cea mai nouă dată per agent (retrimiterea unui fișier vechi nu o dă înapoi).
+  "source_file_name": "ZOF-Centru-001.json",
+  "source_file_mtime": "2026-09-17T06:12:33.000Z",
+
   "products": [
     {
       "sku": "RB-3025-001",       // OBLIGATORIU — cheia de join cu tot restul
@@ -181,6 +188,7 @@ Maximum 5000 de înregistrări per listă per cerere.
   "accepted":   { "products": 2, "inventory": 2, "sales": 2 },
   "duplicates": 0,
   "watermark":  "2026-08-26T12:00:00.000Z",
+  "data_as_of": "2026-09-17T06:12:33.000Z",
   "server_time":"2026-08-26T12:00:01.123Z"
 }
 ```

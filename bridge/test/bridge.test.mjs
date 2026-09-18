@@ -365,6 +365,20 @@ describe('semnare si transe', () => {
     assert.throws(() => chunkPayload({ agent_version: 'v', sales: Array.from({ length: 5001 }, () => ({ receipt_ref: 'x' })) }), /peste limita/);
   });
 
+  test('data fisierului de export merge in payload si, la transe, doar in ultima (ca watermark-ul)', () => {
+    const mtime = new Date('2026-09-17T06:12:33.000Z');
+    const payload = buildPayload({ products: [{ sku: 'a' }], sales: [{ receipt_ref: '1' }], watermark: 'w', sourceFile: { name: 'ZOF-Centru-001.json', mtime } });
+    assert.equal(payload.source_file_name, 'ZOF-Centru-001.json');
+    assert.equal(payload.source_file_mtime, '2026-09-17T06:12:33.000Z');
+    assert.ok(!('source_file_mtime' in buildPayload({ products: [], sales: [], watermark: null })), 'fara fisier, fara camp');
+
+    const sales = Array.from({ length: 12_000 }, (_, i) => ({ i, receipt_ref: String(Math.floor(i / 3)) }));
+    const chunks = chunkPayload({ ...payload, sales });
+    assert.equal(chunks.length, 3);
+    assert.deepEqual(chunks.map((c) => c.source_file_mtime), [undefined, undefined, '2026-09-17T06:12:33.000Z']);
+    assert.deepEqual(chunks.map((c) => c.source_file_name), [undefined, undefined, 'ZOF-Centru-001.json']);
+  });
+
   test('raspunsurile serverului sunt explicate pe intelesul omului si validate', () => {
     const t = (res, opts) => { try { interpretResponse(res, opts); return null; } catch (e) { assert.ok(e instanceof SendError); return e.message; } };
     assert.match(t({ ok: false, status: 401, data: { error: 'x' } }), /ceasul/);
@@ -460,10 +474,19 @@ describe('cap-coada peste serverul real', () => {
     assert.ok(fs.existsSync(path.join(outDir, 'ZOF-Centru-001.raport.txt')));
     assert.equal(get('SELECT COUNT(*) AS n FROM sales').n, before);
 
+    // Data fisierului (mtime) ajunge pe server si devine „data din care sunt cifrele".
+    const fileTime = new Date('2026-09-17T06:12:33.000Z');
+    fs.utimesSync(fixturePath, fileTime, fileTime);
     const sent = await run(process.execPath, [BRIDGE, '--send', fixturePath, '--quiet', '--out', outDir], { env });
     assert.match(sent.stdout, /server a acceptat products=\d+ sales=0, vanzari deja existente \(ignorate\): 14/);
     assert.ok(!sent.stdout.includes(creds.apiKey), 'cheia API nu trebuie sa apara in output');
     assert.match(fs.readFileSync(path.join(outDir, 'ZOF-Centru-001.raport.txt'), 'utf8'), /TRIMITERE REALA — reusita[\s\S]*Rezultat:  cererea 1\/1: OK/);
+    assert.match(fs.readFileSync(path.join(outDir, 'ZOF-Centru-001.raport.txt'), 'utf8'), /Exportat:  17\.09\.2026, 09:12:33/);
+    const payloadOnDisk = JSON.parse(fs.readFileSync(path.join(outDir, 'ZOF-Centru-001.payload.json'), 'utf8'));
+    assert.equal(payloadOnDisk.source_file_mtime, fileTime.toISOString());
+    assert.equal(payloadOnDisk.source_file_name, 'ZOF-Centru-001.json');
+    const state = get('SELECT data_as_of, data_source_file FROM sync_state WHERE connector_id = ?', 'pc-centru-1');
+    assert.deepEqual({ ...state }, { data_as_of: fileTime.toISOString(), data_source_file: 'ZOF-Centru-001.json' });
 
     await assert.rejects(run(process.execPath, [BRIDGE, fixturePath], { env }), /explicit --dry-run sau --send/);
     await assert.rejects(run(process.execPath, [BRIDGE, '--dry-run', fixturePath, '--out'], { env }), /are nevoie de o valoare/);

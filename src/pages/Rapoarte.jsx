@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
-  Download, ShoppingBag, Package, BarChart3, TrendingUp, Globe, MapPin, Loader2, FileText,
+  Download, ShoppingBag, Package, BarChart3, TrendingUp, Globe, MapPin, Loader2, FileText, FileSpreadsheet,
 } from 'lucide-react';
 
 import PageHeader from '@/components/ui/PageHeader';
@@ -10,18 +10,24 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ZofAPI } from '@/lib/api-service';
 import {
-  downloadFile, downloadPdf, formatDateTime, timestampSuffix, toCsv,
+  downloadFile, downloadPdf, downloadXlsx, formatDateTime, timestampSuffix, toCsv,
 } from '@/lib/export';
+import { formatDay } from '@/lib/format';
 
 /**
  * Generare de rapoarte.
  *
  * Pagina era in intregime decorativa: sase carduri statice al caror buton facea
  * `alert("Raportul va fi disponibil cand bridge-ul API este conectat")`. Acum
- * fiecare raport isi cere datele de la server si produce un fisier real.
+ * fiecare raport isi cere datele de la server si produce un fisier real, in
+ * oricare din cele trei formate: CSV, Excel (.xlsx) sau PDF.
  */
 
 const money = (v) => Math.round(Number(v) || 0);
+
+const FORMATS = ['CSV', 'XLSX', 'PDF'];
+const FORMAT_ICON = { CSV: Download, XLSX: FileSpreadsheet, PDF: FileText };
+const FORMAT_LABEL = { CSV: 'CSV', XLSX: 'Excel', PDF: 'PDF' };
 
 const REPORTS = [
   {
@@ -29,7 +35,7 @@ const REPORTS = [
     title: 'Raport vânzări',
     description: 'Toate tranzacțiile din perioada disponibilă',
     icon: ShoppingBag,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const rows = await ZofAPI.getSales({ limit: 5000 });
       return {
@@ -58,7 +64,7 @@ const REPORTS = [
     title: 'Raport stoc',
     description: 'Situația stocului pe toate locațiile',
     icon: Package,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const rows = await ZofAPI.getStock();
       return {
@@ -86,7 +92,7 @@ const REPORTS = [
     title: 'Performanță produse',
     description: 'Venituri, bucăți vândute și stoc per produs',
     icon: BarChart3,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const rows = await ZofAPI.getProducts();
       return {
@@ -115,7 +121,7 @@ const REPORTS = [
     title: 'Analiză trenduri',
     description: 'Produse în creștere, stagnante și în scădere',
     icon: TrendingUp,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const products = await ZofAPI.getProducts();
       const order = { up: 0, stable: 1, down: 2 };
@@ -149,7 +155,7 @@ const REPORTS = [
     title: 'Raport online',
     description: 'Comenzi din magazinul online',
     icon: Globe,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const rows = await ZofAPI.getShopifyOrders({ limit: 2000 });
       return {
@@ -173,23 +179,29 @@ const REPORTS = [
     title: 'Performanță locații',
     description: 'Comparație între magazine',
     icon: MapPin,
-    formats: ['CSV', 'PDF'],
+    formats: FORMATS,
     async load() {
       const rows = await ZofAPI.getLocations();
+      // Datele vin cu o zi in urma: „azi" ar fi mereu 0. Raportam ultima zi cu
+      // vanzari si luna ei, cu datele scrise in antet ca sa nu fie ambiguu.
+      const period = rows[0]?.period;
+      const lastDay = period?.last_day ? formatDay(period.last_day.to) : 'ultima zi';
+      const month = period?.month ? `${formatDay(period.month.from)} – ${formatDay(period.month.to)}` : 'luna curentă';
       return {
         rows,
         columns: [
           { key: 'name', label: 'Locație' },
           { key: 'type', label: 'Tip' },
-          { key: 'sales_today', label: 'Vânzări azi (RON)' },
-          { key: 'units_today', label: 'Bucăți azi' },
-          { key: 'sales_month', label: 'Vânzări lună (RON)' },
+          { key: 'sales_last_day', label: `Vânzări ${lastDay} (RON)`, map: (r) => money(r.sales_last_day ?? r.sales_today) },
+          { key: 'units_last_day', label: `Bucăți ${lastDay}`, map: (r) => r.units_last_day ?? r.units_today ?? 0 },
+          { key: 'sales_month', label: `Vânzări ${month} (RON)` },
           { key: 'stock_value', label: 'Valoare stoc (RON)' },
           { key: 'products', label: 'Produse în stoc' },
         ],
         summary: (rows) => [
           `Locații active: ${rows.length}`,
-          `Total lună: ${rows.reduce((s, r) => s + money(r.sales_month), 0).toLocaleString('ro-RO')} RON`,
+          `Ultima zi raportată: ${lastDay}`,
+          `Total ${month}: ${rows.reduce((s, r) => s + money(r.sales_month), 0).toLocaleString('ro-RO')} RON`,
         ],
       };
     },
@@ -213,6 +225,8 @@ export default function Rapoarte() {
 
       if (format === 'CSV') {
         downloadFile(`${filename}.csv`, toCsv(columns, rows));
+      } else if (format === 'XLSX') {
+        downloadXlsx(`${filename}.xlsx`, { columns, rows, sheetName: report.title, title: report.title });
       } else {
         await downloadPdf(`${filename}.pdf`, {
           title: report.title,
@@ -223,7 +237,7 @@ export default function Rapoarte() {
         });
       }
 
-      toast.success(`${report.title} — ${rows.length} rânduri exportate`);
+      toast.success(`${report.title} — ${rows.length} rânduri exportate (${FORMAT_LABEL[format]})`);
     } catch (err) {
       toast.error(`Nu am putut genera raportul: ${err.message}`);
     } finally {
@@ -249,7 +263,7 @@ export default function Rapoarte() {
                 <report.icon className="w-5 h-5 text-primary" />
               </div>
               <Badge variant="secondary" className="text-[10px]">
-                {report.formats.join(' / ')}
+                {report.formats.map((f) => FORMAT_LABEL[f]).join(' / ')}
               </Badge>
             </div>
 
@@ -259,6 +273,7 @@ export default function Rapoarte() {
             <div className="flex gap-2">
               {report.formats.map((format) => {
                 const key = `${report.id}-${format}`;
+                const Icon = FORMAT_ICON[format] ?? Download;
                 return (
                   <Button
                     key={format}
@@ -267,13 +282,12 @@ export default function Rapoarte() {
                     className="flex-1 gap-1.5"
                     disabled={busy !== null}
                     onClick={() => generate(report, format)}
+                    title={format === 'XLSX' ? 'Excel (.xlsx)' : format}
                   >
                     {busy === key
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : format === 'PDF'
-                        ? <FileText className="w-3.5 h-3.5" />
-                        : <Download className="w-3.5 h-3.5" />}
-                    {format}
+                      : <Icon className="w-3.5 h-3.5" />}
+                    {FORMAT_LABEL[format]}
                   </Button>
                 );
               })}
@@ -283,8 +297,8 @@ export default function Rapoarte() {
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Fișierele CSV se deschid direct în Excel: separator „;", codificare UTF-8 cu BOM,
-        zecimale cu virgulă.
+        Excel (.xlsx): numerele rămân numere, antetul e fixat și are filtre. CSV: separator „;",
+        codificare UTF-8 cu BOM, zecimale cu virgulă — se deschide direct în Excel. PDF: cu diacritice.
       </p>
     </div>
   );

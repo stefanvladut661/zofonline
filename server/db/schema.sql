@@ -131,6 +131,10 @@ CREATE INDEX IF NOT EXISTS idx_sync_events_connector ON sync_events (connector_i
 
 -- ─── Watermark de sincronizare per agent ────────────────────────────────────
 -- Agentul cere doar inregistrarile cu modified_at > last_watermark (plan.md §7.3).
+-- data_as_of / data_source_file = momentul (mtime) si numele fisierului de export
+-- din care au venit ultimele date. Dashboard-ul afiseaza asta in loc de „Live":
+-- exportul DorSoft se face a doua zi, deci cifrele sunt mereu „din fisierul de
+-- la <data>", nu „de acum".
 CREATE TABLE IF NOT EXISTS sync_state (
   connector_id     TEXT PRIMARY KEY,
   location_id      TEXT NOT NULL,
@@ -138,6 +142,8 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_heartbeat_at TEXT,
   status           TEXT NOT NULL DEFAULT 'unknown',
   agent_version    TEXT,
+  data_as_of       TEXT,
+  data_source_file TEXT,
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

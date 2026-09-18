@@ -302,10 +302,20 @@ function sumLines(docRows, where) {
   return s;
 }
 
-/** Corpul cererii /api/ingest. Fara inventory (R6). */
-export function buildPayload({ products, sales, watermark }) {
+/**
+ * Corpul cererii /api/ingest. Fara inventory (R6).
+ *
+ * `sourceFile` = { name, mtime } al fisierului de export: serverul il retine ca
+ * „datele sunt din fisierul X, de la ora Y" si dashboard-ul il afiseaza in loc
+ * de „Live" — exportul se face a doua zi, deci cifrele nu sunt niciodata „de acum".
+ */
+export function buildPayload({ products, sales, watermark, sourceFile }) {
   const payload = { agent_version: AGENT_VERSION };
   if (watermark) payload.watermark = watermark;
+  if (sourceFile?.mtime) {
+    payload.source_file_name = sourceFile.name ?? null;
+    payload.source_file_mtime = new Date(sourceFile.mtime).toISOString();
+  }
   if (products?.length) payload.products = products;
   if (sales?.length) payload.sales = sales;
   return payload;

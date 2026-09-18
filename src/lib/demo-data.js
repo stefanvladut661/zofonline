@@ -22,6 +22,20 @@ export const DEMO_DASHBOARD = {
   declining_products: 7,
   estimated_profit: 167230,
   estimated_margin: 48.7,
+  margin_coverage: 100,
+  sales_last_day: 14520,
+  sales_last_day_units: 12,
+  sales_prev_month: 305060,
+  shopify_evolution_vs_last_month: 6.1,
+  period: {
+    last_day: { from: "2026-09-17", to: "2026-09-17" },
+    week: { from: "2026-09-11", to: "2026-09-17" },
+    month: { from: "2026-09-01", to: "2026-09-17" },
+    prev_month: { from: "2026-08-01", to: "2026-08-17" },
+  },
+  data_as_of: null,
+  last_sync_at: null,
+  data_sources: [],
   last_updated: new Date().toISOString()
 };
 
@@ -124,6 +138,12 @@ export const DEMO_PERFORMANCE = {
     }))
   ).flat(),
   online_vs_fizic: { online: 31590, fizic: 311300 },
+  by_location: [
+    { id: 1, name: "Argeș Mall", type: "fizic", revenue: 145200, units: 118, orders: 96, share: 42.3 },
+    { id: 2, name: "Exercițiu", type: "fizic", revenue: 98300, units: 81, orders: 70, share: 28.7 },
+    { id: 3, name: "I.C. Brătianu", type: "fizic", revenue: 67800, units: 55, orders: 48, share: 19.8 },
+    { id: 4, name: "zof.ro", type: "online", revenue: 31590, units: 24, orders: 20, share: 9.2 },
+  ],
 };
 
 export const DEMO_PRODUCTS = DEMO_TOP_PRODUCTS.map((p, i) => ({

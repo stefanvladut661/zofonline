@@ -4,8 +4,9 @@ import { useApiPolling } from '@/lib/hooks/useApiPolling';
 import { ZofAPI } from '@/lib/api-service';
 import { demoFallback } from '@/lib/data-source';
 import { DEMO_MONTHLY_SALES, DEMO_BRANDS, DEMO_CATEGORIES, DEMO_PERFORMANCE } from '@/lib/demo-data';
-import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatNumber, formatPercent, formatDateRange } from '@/lib/format';
 import { motion } from 'framer-motion';
+import { MapPin, Globe } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -65,12 +66,20 @@ export default function Analytics() {
     demoFallback('performance', ZofAPI.getPerformance, DEMO_PERFORMANCE),
     60000);
 
-  const onlineVsFizic = performance?.online_vs_fizic 
-    ? [
-        { name: 'Magazine fizice', value: performance.online_vs_fizic.fizic },
-        { name: 'Shopify (zof.ro)', value: performance.online_vs_fizic.online }
-      ]
-    : [];
+  // Per magazin (fiecare locatie fizica + online), nu „fizic vs online" la
+  // gramada. Serverele mai vechi trimit doar online_vs_fizic — cadem pe el.
+  const byLocation = performance?.by_location?.length
+    ? performance.by_location.map((l) => ({ name: l.name, value: l.revenue, type: l.type, share: l.share, orders: l.orders }))
+    : performance?.online_vs_fizic
+      ? [
+          { name: 'Magazine fizice', value: performance.online_vs_fizic.fizic, type: 'fizic' },
+          { name: 'Shopify (zof.ro)', value: performance.online_vs_fizic.online, type: 'online' },
+        ]
+      : [];
+  const byLocationTotal = byLocation.reduce((s, l) => s + (l.value || 0), 0);
+  const monthPeriod = performance?.period?.month
+    ? formatDateRange(performance.period.month.from, performance.period.month.to)
+    : 'luna curentă';
 
   return (
     <div className="space-y-5">
@@ -92,31 +101,50 @@ export default function Analytics() {
           </div>
         </ChartCard>
 
-        {/* Online vs Fizic */}
-        <ChartCard title="Online vs. Magazine fizice">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={onlineVsFizic}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {onlineVsFizic.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-                <Legend 
-                  verticalAlign="bottom"
-                  formatter={(value) => <span className="text-xs text-foreground">{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Per magazin */}
+        <ChartCard title={`Vânzări per magazin · ${monthPeriod}`}>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+            <div className="h-64 sm:flex-1 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={byLocation}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                    dataKey="value"
+                    nameKey="name"
+                  >
+                    {byLocation.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend
+                    verticalAlign="bottom"
+                    formatter={(value) => <span className="text-xs text-foreground">{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <ul className="sm:w-64 shrink-0 self-center space-y-1.5" aria-label="Vânzări per magazin">
+              {byLocation.map((loc, i) => {
+                const share = loc.share ?? (byLocationTotal ? (loc.value / byLocationTotal) * 100 : 0);
+                const Icon = loc.type === 'online' ? Globe : MapPin;
+                return (
+                  <li key={loc.name} className="flex items-center gap-2 text-xs">
+                    <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    <Icon className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="flex-1 min-w-0 truncate">{loc.name}</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(loc.value)}</span>
+                    <span className="text-muted-foreground tabular-nums w-11 text-right">{formatNumber(Math.round(share))}%</span>
+                  </li>
+                );
+              })}
+              {byLocation.length === 0 && <li className="text-xs text-muted-foreground">Fără vânzări în perioadă.</li>}
+            </ul>
           </div>
         </ChartCard>
 

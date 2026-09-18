@@ -22,6 +22,28 @@ ok('badge-ul arata Live', has(h, 'Live'));
 ok('fara avertisment de demo', !has(h, 'Date demo'));
 ok('banner ascuns', renderToString(<DemoDataBanner />) === '');
 
+console.log('\n--- Prospetimea datelor (data fisierului de export, nu „Live") ---');
+const asOf = new Date(Date.now() - 26 * 3600_000).toISOString(); // fisier de ieri
+const older = new Date(Date.now() - 4 * 86400_000).toISOString(); // o locatie ramasa in urma
+h = renderToString(<PageHeader title="Dashboard" freshness={{
+  asOf, syncedAt: new Date().toISOString(),
+  sources: [
+    { location: 'Centru', file: 'ZOF-Centru-001.json', as_of: asOf },
+    { location: 'Exercițiu', file: 'ZOF-Exercitiu-001.json', as_of: older },
+  ],
+}} />);
+ok('nu mai scrie Live', !has(h, '>Live') && !has(h, 'Live •'));
+ok('scrie „Date din" cu data fisierului', has(h, 'Date din') && has(h, 'acum 1 zile'));
+ok('numele fisierelor sunt in tooltip', has(h, 'ZOF-Centru-001.json') && has(h, 'ZOF-Exercitiu-001.json'));
+ok('locatia ramasa in urma e numita', has(h, 'Exercițiu: fișier mai vechi') && !has(h, 'Centru: fișier'));
+
+h = renderToString(<PageHeader title="Dashboard" freshness={{ asOf: null, syncedAt: null, sources: [] }} />);
+ok('fara fisier si fara sync -> spune ca nu sunt date', has(h, 'Fără date sincronizate'));
+h = renderToString(<PageHeader title="Dashboard" freshness={{ asOf: null, syncedAt: asOf, sources: [] }} />);
+ok('punte veche (fara data fisierului) -> arata ultima sincronizare', has(h, 'Ultima sincronizare'));
+h = renderToString(<PageHeader title="Dashboard" freshness={{ loading: true }} />);
+ok('cat se incarca nu inventeaza o data', has(h, 'se încarcă'));
+
 console.log('\n--- Stare DEMO (bridge picat) ---');
 markSource('dashboard', true);
 markSource('top-products', true);

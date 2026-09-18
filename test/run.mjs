@@ -17,7 +17,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const outdir = path.join(here, '.build');
 
-const SUITES = ['export.test.js', 'demo-banner.test.jsx', 'pages.test.jsx'];
+const SUITES = ['export.test.js', 'xlsx.test.js', 'format.test.js', 'demo-banner.test.jsx', 'pages.test.jsx'];
 
 await build({
   entryPoints: SUITES.map((f) => path.join(here, f)),

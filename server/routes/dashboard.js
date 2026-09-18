@@ -7,24 +7,110 @@ import { all, get } from '../db/index.js';
  * src/lib/api-service.js si componentele — aceleasi chei ca in demo-data.js.
  * Asa, trecerea de pe date demo pe date reale nu cere modificari in UI.
  *
- * Toate calculele de „azi / saptamana / luna" folosesc ora locala a serverului,
- * nu UTC: un bon de la 23:30 trebuie sa cada in ziua in care s-a vandut.
+ * Toate calculele pe zile folosesc ora locala a serverului, nu UTC: un bon de
+ * la 23:30 trebuie sa cada in ziua in care s-a vandut.
+ *
+ * PERIOADELE. Datele ajung cu o zi intarziere (exportul DorSoft se face a doua
+ * zi), deci „azi" ar fi mereu gol. Toate perioadele se ancoreaza pe ULTIMA ZI
+ * CU VANZARI din baza, nu pe ceasul serverului, iar raspunsul contine
+ * intervalul exact al fiecareia (`period`), ca dashboard-ul sa-l afiseze in loc
+ * de „luna aceasta".
  */
 
 const REVENUE = 'quantity * unit_price';
+const DAY = "date(sold_at, 'localtime')";
 
 // ─── Ajutoare ────────────────────────────────────────────────────────────────
 
 const num = (v) => (v == null ? 0 : Number(v));
 
+/** Procent de evolutie fata de o baza; null (nu 0) cand baza e goala — altfel „0%" ar minti. */
+const pctChange = (current, previous) =>
+  (previous ? Number((((current - previous) / previous) * 100).toFixed(1)) : null);
+
 function criticalThreshold() {
   return num(get('SELECT critical_stock_threshold AS t FROM app_settings WHERE id = ?', 'default')?.t) || 3;
+}
+
+// ─── Perioade raportate ──────────────────────────────────────────────────────
+
+/** Ultima zi (locala) cu vanzari; fara vanzari, ziua de azi. */
+export function lastReportedDay() {
+  return get(`SELECT MAX(${DAY}) AS d FROM sales`)?.d ?? get("SELECT date('now', 'localtime') AS d").d;
+}
+
+/**
+ * Intervalele afisate pe dashboard, toate inchise ([from, to], zile locale
+ * „YYYY-MM-DD"), ancorate pe ultima zi raportata:
+ *   last_day    ultima zi raportata
+ *   week        ultimele 7 zile, pana la ea inclusiv
+ *   month       luna ei, de la 1 pana la ea
+ *   prev_month  ACEEASI perioada din luna precedenta (de la 1 pana la aceeasi
+ *               zi), ca sa comparam mere cu mere — nu luna intreaga, care pe 5
+ *               ale lunii ar arata mereu „-80%". Daca luna precedenta e mai
+ *               scurta (31 mar. vs februarie), se opreste la ultima ei zi.
+ */
+export function reportingPeriods(anchor = lastReportedDay()) {
+  // SQLite normalizeaza „31 feb." in „3 mar.", de-aia MIN cu ultima zi a lunii precedente.
+  const r = get(`
+    SELECT date(?, '-6 days')                                                  AS week_from,
+           date(?, 'start of month')                                           AS month_from,
+           date(?, 'start of month', '-1 month')                               AS prev_from,
+           MIN(date(?, '-1 month'), date(?, 'start of month', '-1 day'))       AS prev_to
+  `, anchor, anchor, anchor, anchor, anchor);
+  return {
+    last_day: { from: anchor, to: anchor },
+    week: { from: r.week_from, to: anchor },
+    month: { from: r.month_from, to: anchor },
+    prev_month: { from: r.prev_from, to: r.prev_to },
+  };
+}
+
+/** Venit / bucati / bonuri intr-o perioada, optional cu o conditie in plus. */
+function periodTotals(p, extra = '') {
+  return get(`
+    SELECT COALESCE(SUM(${REVENUE}), 0) AS revenue,
+           COALESCE(SUM(quantity), 0)   AS units,
+           COUNT(DISTINCT source_ref)   AS orders
+    FROM sales WHERE ${DAY} BETWEEN ? AND ? ${extra}
+  `, p.from, p.to);
+}
+
+// ─── Prospetimea datelor ─────────────────────────────────────────────────────
+
+/**
+ * Din ce fisiere de export vin datele si de cand sunt, per agent/locatie.
+ * `data_as_of` = cel mai nou fisier; UI-ul avertizeaza daca o locatie a ramas
+ * in urma. `last_sync_at` e doar cand a rulat puntea ultima data — fara
+ * fisier cunoscut (punte veche), e tot ce putem spune.
+ */
+export function dataFreshness() {
+  const sources = all(`
+    SELECT s.connector_id, s.location_id, l.name AS location_name,
+           s.data_as_of, s.data_source_file, c.last_sync_time
+    FROM sync_state s
+    LEFT JOIN locations l ON l.id = s.location_id
+    LEFT JOIN connectors c ON c.connector_id = s.connector_id
+    WHERE s.data_as_of IS NOT NULL OR c.last_sync_time IS NOT NULL
+    ORDER BY s.data_as_of DESC, c.last_sync_time DESC
+  `).map((r) => ({
+    connector_id: r.connector_id,
+    location_id: r.location_id,
+    location: r.location_name ?? r.location_id,
+    file: r.data_source_file,
+    as_of: r.data_as_of,
+    synced_at: r.last_sync_time,
+  }));
+  const newest = (key) => sources.map((s) => s[key]).filter(Boolean).sort().at(-1) ?? null;
+  return { data_as_of: newest('as_of'), last_sync_at: newest('synced_at'), data_sources: sources };
 }
 
 // ─── /api/dashboard ──────────────────────────────────────────────────────────
 
 export function getDashboard() {
   const threshold = criticalThreshold();
+  const period = reportingPeriods();
+  const todayOnly = get("SELECT date('now', 'localtime') AS d").d;
 
   const stock = get(`
     SELECT
@@ -35,19 +121,13 @@ export function getDashboard() {
     LEFT JOIN inventory i ON i.sku = p.sku
   `);
 
-  const period = (whereClause) => get(`
-    SELECT COALESCE(SUM(${REVENUE}), 0) AS revenue,
-           COALESCE(SUM(quantity), 0)   AS units,
-           COUNT(DISTINCT source_ref)   AS orders
-    FROM sales WHERE ${whereClause}
-  `);
-
-  const today = period("date(sold_at, 'localtime') = date('now', 'localtime')");
-  const week = period("date(sold_at, 'localtime') >= date('now', 'localtime', '-6 days')");
-  const month = period("strftime('%Y-%m', sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')");
-  const prevMonth = period(
-    "strftime('%Y-%m', sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime', '-1 month')",
-  );
+  const today = periodTotals({ from: todayOnly, to: todayOnly });
+  const lastDay = periodTotals(period.last_day);
+  const week = periodTotals(period.week);
+  const month = periodTotals(period.month);
+  const prevMonth = periodTotals(period.prev_month);
+  const onlineMonth = periodTotals(period.month, "AND channel = 'online'");
+  const onlinePrevMonth = periodTotals(period.prev_month, "AND channel = 'online'");
 
   const stockCounts = get(`
     SELECT
@@ -58,34 +138,35 @@ export function getDashboard() {
 
   const bestStore = get(`
     SELECT l.name FROM sales s JOIN locations l ON l.id = s.location_id
-    WHERE strftime('%Y-%m', s.sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
+    WHERE date(s.sold_at, 'localtime') BETWEEN ? AND ?
     GROUP BY l.id ORDER BY SUM(${REVENUE}) DESC LIMIT 1
-  `);
+  `, period.month.from, period.month.to);
 
   const topBrand = get(`
     SELECT p.brand FROM sales s JOIN products p ON p.sku = s.sku
-    WHERE p.brand IS NOT NULL
-      AND strftime('%Y-%m', s.sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
+    WHERE p.brand IS NOT NULL AND date(s.sold_at, 'localtime') BETWEEN ? AND ?
     GROUP BY p.brand ORDER BY SUM(${REVENUE}) DESC LIMIT 1
-  `);
+  `, period.month.from, period.month.to);
 
-  const onlineMonth = period(
-    "channel = 'online' AND strftime('%Y-%m', sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')",
-  );
-
+  // Profitul se poate estima DOAR pe liniile al caror produs are pret de
+  // achizitie. Restul nu se numara ca profit 100% — inainte asa se facea, iar
+  // cum puntea DorSoft nu trimite cost_price, „marja" iesea mereu 100%.
+  // `covered_revenue` spune pe ce parte din venit se bazeaza estimarea.
   const margin = get(`
-    SELECT COALESCE(SUM(s.quantity * (s.unit_price - COALESCE(p.cost_price, 0))), 0) AS profit,
-           COALESCE(SUM(${REVENUE}), 0) AS revenue
+    SELECT COALESCE(SUM(CASE WHEN p.cost_price IS NOT NULL
+                             THEN s.quantity * (s.unit_price - p.cost_price) END), 0) AS profit,
+           COALESCE(SUM(CASE WHEN p.cost_price IS NOT NULL THEN ${REVENUE} END), 0)   AS covered_revenue,
+           COALESCE(SUM(${REVENUE}), 0)                                              AS revenue
     FROM sales s LEFT JOIN products p ON p.sku = s.sku
-    WHERE strftime('%Y-%m', s.sold_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
-  `);
+    WHERE date(s.sold_at, 'localtime') BETWEEN ? AND ?
+  `, period.month.from, period.month.to);
 
-  const trends = getTrendCounts();
+  const trends = getTrendCounts(period.last_day.to);
 
   const monthRevenue = num(month.revenue);
-  const prevRevenue = num(prevMonth.revenue);
   const profit = num(margin.profit);
-  const marginRevenue = num(margin.revenue);
+  const coveredRevenue = num(margin.covered_revenue);
+  const marginCoverage = num(margin.revenue) ? (coveredRevenue / num(margin.revenue)) * 100 : 0;
 
   return {
     total_products: num(stock.total_products),
@@ -93,38 +174,44 @@ export function getDashboard() {
     total_cost_value: Math.round(num(stock.total_cost_value)),
     sales_today: Math.round(num(today.revenue)),
     sales_today_units: num(today.units),
+    products_sold_today: num(today.units),
+    sales_last_day: Math.round(num(lastDay.revenue)),
+    sales_last_day_units: num(lastDay.units),
     sales_week: Math.round(num(week.revenue)),
     sales_month: Math.round(monthRevenue),
-    products_sold_today: num(today.units),
+    sales_prev_month: Math.round(num(prevMonth.revenue)),
     out_of_stock: num(stockCounts.out_of_stock),
     critical_stock: num(stockCounts.critical_stock),
     best_store: bestStore?.name ?? null,
     top_brand: topBrand?.brand ?? null,
     average_receipt: num(month.orders) ? Math.round(monthRevenue / num(month.orders)) : 0,
-    evolution_vs_last_month: prevRevenue ? Number((((monthRevenue - prevRevenue) / prevRevenue) * 100).toFixed(1)) : 0,
+    evolution_vs_last_month: pctChange(monthRevenue, num(prevMonth.revenue)),
     shopify_orders: num(onlineMonth.orders),
     shopify_revenue: Math.round(num(onlineMonth.revenue)),
+    shopify_orders_prev_month: num(onlinePrevMonth.orders),
+    shopify_revenue_prev_month: Math.round(num(onlinePrevMonth.revenue)),
+    shopify_evolution_vs_last_month: pctChange(num(onlineMonth.revenue), num(onlinePrevMonth.revenue)),
     trending_products: trends.up,
     declining_products: trends.down,
-    estimated_profit: Math.round(profit),
-    estimated_margin: marginRevenue ? Number(((profit / marginRevenue) * 100).toFixed(1)) : 0,
+    estimated_profit: coveredRevenue ? Math.round(profit) : null,
+    estimated_margin: coveredRevenue ? Number(((profit / coveredRevenue) * 100).toFixed(1)) : null,
+    margin_coverage: Number(marginCoverage.toFixed(1)),
+    period,
+    ...dataFreshness(),
     last_updated: new Date().toISOString(),
   };
 }
 
-/** Compara ultimele 7 zile cu cele 7 dinainte, per SKU. */
-function skuTrendRows() {
+/** Compara ultimele 7 zile (pana la ziua ancora inclusiv) cu cele 7 dinainte, per SKU. */
+function skuTrendRows(anchor = lastReportedDay()) {
   return all(`
     SELECT sku,
-      COALESCE(SUM(CASE WHEN date(sold_at,'localtime') >= date('now','localtime','-6 days')
-                        THEN ${REVENUE} ELSE 0 END), 0) AS recent,
-      COALESCE(SUM(CASE WHEN date(sold_at,'localtime') <  date('now','localtime','-6 days')
-                        AND date(sold_at,'localtime') >= date('now','localtime','-13 days')
-                        THEN ${REVENUE} ELSE 0 END), 0) AS previous
+      COALESCE(SUM(CASE WHEN ${DAY} >= date(?, '-6 days') THEN ${REVENUE} ELSE 0 END), 0)  AS recent,
+      COALESCE(SUM(CASE WHEN ${DAY} <  date(?, '-6 days') THEN ${REVENUE} ELSE 0 END), 0)  AS previous
     FROM sales
-    WHERE date(sold_at,'localtime') >= date('now','localtime','-13 days')
+    WHERE ${DAY} BETWEEN date(?, '-13 days') AND ?
     GROUP BY sku
-  `);
+  `, anchor, anchor, anchor, anchor);
 }
 
 function classifyTrend(recent, previous) {
@@ -135,9 +222,9 @@ function classifyTrend(recent, previous) {
   return 'stable';
 }
 
-function getTrendCounts() {
+function getTrendCounts(anchor) {
   let up = 0, down = 0;
-  for (const r of skuTrendRows()) {
+  for (const r of skuTrendRows(anchor)) {
     const t = classifyTrend(num(r.recent), num(r.previous));
     if (t === 'up') up++;
     else if (t === 'down') down++;
@@ -290,28 +377,36 @@ export function getSales({ limit = 500 } = {}) {
 // ─── Locatii ─────────────────────────────────────────────────────────────────
 
 export function getLocations() {
+  const period = reportingPeriods();
+  const { last_day: lastDay, month } = period;
   return all(`
     SELECT l.id, l.name, l.type,
       (SELECT COALESCE(SUM(quantity * unit_price),0) FROM sales
-        WHERE location_id = l.id AND date(sold_at,'localtime') = date('now','localtime')) AS sales_today,
+        WHERE location_id = l.id AND ${DAY} = date('now','localtime')) AS sales_today,
       (SELECT COALESCE(SUM(quantity),0) FROM sales
-        WHERE location_id = l.id AND date(sold_at,'localtime') = date('now','localtime')) AS units_today,
+        WHERE location_id = l.id AND ${DAY} = date('now','localtime')) AS units_today,
       (SELECT COALESCE(SUM(quantity * unit_price),0) FROM sales
-        WHERE location_id = l.id
-          AND strftime('%Y-%m', sold_at,'localtime') = strftime('%Y-%m','now','localtime')) AS sales_month,
+        WHERE location_id = l.id AND ${DAY} BETWEEN ? AND ?) AS sales_last_day,
+      (SELECT COALESCE(SUM(quantity),0) FROM sales
+        WHERE location_id = l.id AND ${DAY} BETWEEN ? AND ?) AS units_last_day,
+      (SELECT COALESCE(SUM(quantity * unit_price),0) FROM sales
+        WHERE location_id = l.id AND ${DAY} BETWEEN ? AND ?) AS sales_month,
       (SELECT COALESCE(SUM(i.quantity * p.price),0) FROM inventory i
         LEFT JOIN products p ON p.sku = i.sku WHERE i.location_id = l.id) AS stock_value,
       (SELECT COUNT(*) FROM inventory WHERE location_id = l.id AND quantity > 0) AS products
     FROM locations l WHERE l.is_active = 1 ORDER BY l.name
-  `).map((r) => ({
+  `, lastDay.from, lastDay.to, lastDay.from, lastDay.to, month.from, month.to).map((r) => ({
     id: r.id,
     name: r.name,
     type: r.type,
     sales_today: Math.round(num(r.sales_today)),
     units_today: num(r.units_today),
+    sales_last_day: Math.round(num(r.sales_last_day)),
+    units_last_day: num(r.units_last_day),
     sales_month: Math.round(num(r.sales_month)),
     stock_value: Math.round(num(r.stock_value)),
     products: num(r.products),
+    period,
   }));
 }
 
@@ -365,18 +460,14 @@ export function getAlerts() {
 // ─── Analitice ───────────────────────────────────────────────────────────────
 
 export function getBrands() {
+  const { month, prev_month: prevMonth } = reportingPeriods();
   const trends = all(`
     SELECT p.brand,
-      COALESCE(SUM(CASE WHEN strftime('%Y-%m', s.sold_at,'localtime') = strftime('%Y-%m','now','localtime')
-                        THEN ${REVENUE} ELSE 0 END),0) AS cur,
-      COALESCE(SUM(CASE WHEN strftime('%Y-%m', s.sold_at,'localtime') = strftime('%Y-%m','now','localtime','-1 month')
-                        THEN ${REVENUE} ELSE 0 END),0) AS prev
+      COALESCE(SUM(CASE WHEN date(s.sold_at,'localtime') BETWEEN ? AND ? THEN ${REVENUE} ELSE 0 END),0) AS cur,
+      COALESCE(SUM(CASE WHEN date(s.sold_at,'localtime') BETWEEN ? AND ? THEN ${REVENUE} ELSE 0 END),0) AS prev
     FROM sales s JOIN products p ON p.sku = s.sku WHERE p.brand IS NOT NULL GROUP BY p.brand
-  `);
-  const trendByBrand = new Map(trends.map((r) => [
-    r.brand,
-    num(r.prev) ? Number((((num(r.cur) - num(r.prev)) / num(r.prev)) * 100).toFixed(1)) : 0,
-  ]));
+  `, month.from, month.to, prevMonth.from, prevMonth.to);
+  const trendByBrand = new Map(trends.map((r) => [r.brand, pctChange(num(r.cur), num(r.prev)) ?? 0]));
 
   return all(`
     SELECT p.brand AS name,
@@ -412,26 +503,51 @@ export function getCategories() {
 }
 
 export function getPerformance() {
+  const period = reportingPeriods();
+  const { month } = period;
+
   // SQLite: %w = 0 (duminica)..6. UI-ul asteapta 0 = luni.
   const rows = all(`
     SELECT ((CAST(strftime('%w', sold_at,'localtime') AS INTEGER) + 6) % 7) AS day,
            CAST(strftime('%H', sold_at,'localtime') AS INTEGER)             AS hour,
            COALESCE(SUM(${REVENUE}),0)                                      AS value
     FROM sales
-    WHERE date(sold_at,'localtime') >= date('now','localtime','-90 days')
+    WHERE ${DAY} BETWEEN date(?, '-89 days') AND ?
     GROUP BY day, hour
-  `);
+  `, month.to, month.to);
 
   const split = get(`
     SELECT COALESCE(SUM(CASE WHEN channel='online' THEN ${REVENUE} ELSE 0 END),0) AS online,
            COALESCE(SUM(CASE WHEN channel='fizic'  THEN ${REVENUE} ELSE 0 END),0) AS fizic
-    FROM sales
-    WHERE strftime('%Y-%m', sold_at,'localtime') = strftime('%Y-%m','now','localtime')
-  `);
+    FROM sales WHERE ${DAY} BETWEEN ? AND ?
+  `, month.from, month.to);
+
+  // Vanzarile lunii, per locatie (fiecare magazin + online), cu ponderea in total.
+  const perLocation = all(`
+    SELECT l.id, l.name, l.type,
+           COALESCE(SUM(${REVENUE}), 0)  AS revenue,
+           COALESCE(SUM(s.quantity), 0)  AS units,
+           COUNT(DISTINCT s.source_ref)  AS orders
+    FROM locations l
+    LEFT JOIN sales s ON s.location_id = l.id AND date(s.sold_at,'localtime') BETWEEN ? AND ?
+    WHERE l.is_active = 1
+    GROUP BY l.id ORDER BY revenue DESC, l.name
+  `, month.from, month.to);
+  const totalRevenue = perLocation.reduce((sum, r) => sum + num(r.revenue), 0);
 
   return {
     heatmap: rows.map((r) => ({ day: num(r.day), hour: num(r.hour), value: Math.round(num(r.value)) })),
     online_vs_fizic: { online: Math.round(num(split.online)), fizic: Math.round(num(split.fizic)) },
+    by_location: perLocation.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      revenue: Math.round(num(r.revenue)),
+      units: num(r.units),
+      orders: num(r.orders),
+      share: totalRevenue ? Number(((num(r.revenue) / totalRevenue) * 100).toFixed(1)) : 0,
+    })),
+    period,
   };
 }
 

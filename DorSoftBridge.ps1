@@ -209,7 +209,9 @@ function Send-Signed {
 function Send-Batch {
     # Trimite inregistrarile in transe de maximum $IngestLimit (limita serverului).
     # Intoarce: 'ok' | 'invalid' (400 - nu are rost de reincercat) | 'retry'
-    param([string]$Kind, $Records, [string]$Secret)
+    # $SourceFile (optional): fisierul de export din care vin datele - serverul
+    # retine data lui (mtime) si dashboardul o afiseaza ca "date din <data>".
+    param([string]$Kind, $Records, [string]$Secret, $SourceFile = $null)
 
     for ($i = 0; $i -lt $Records.Count; $i += $IngestLimit) {
         $end = [Math]::Min($i + $IngestLimit, $Records.Count) - 1
@@ -217,6 +219,10 @@ function Send-Batch {
 
         $payload = @{ agent_version = $AgentVersion }
         $payload[$Kind] = $chunk
+        if ($SourceFile) {
+            $payload['source_file_name']  = $SourceFile.Name
+            $payload['source_file_mtime'] = $SourceFile.LastWriteTimeUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
+        }
         $body = $payload | ConvertTo-Json -Depth 5 -Compress
 
         $result = Send-Signed -Path '/api/ingest' -Body $body -Secret $Secret
@@ -326,10 +332,10 @@ while ($true) {
 
                 if ($isSales) {
                     $records = @(Convert-SalesRows -Rows $rows -FileName $file.Name)
-                    $outcome = Send-Batch -Kind 'sales' -Records $records -Secret $Secret
+                    $outcome = Send-Batch -Kind 'sales' -Records $records -Secret $Secret -SourceFile $file
                 } else {
                     $records = @(Convert-StockRows -Rows $rows -FileName $file.Name)
-                    $outcome = Send-Batch -Kind 'inventory' -Records $records -Secret $Secret
+                    $outcome = Send-Batch -Kind 'inventory' -Records $records -Secret $Secret -SourceFile $file
                 }
 
                 switch ($outcome) {

@@ -8,6 +8,23 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 let db = null;
 
 /**
+ * Coloane adaugate dupa prima versiune a schemei. CREATE TABLE IF NOT EXISTS nu
+ * modifica un tabel care exista deja, deci bazele vechi le primesc aici, o
+ * singura data. Lista creste doar prin adaugare la sfarsit.
+ */
+const ADDED_COLUMNS = [
+  ['sync_state', 'data_as_of', 'TEXT'],
+  ['sync_state', 'data_source_file', 'TEXT'],
+];
+
+function addMissingColumns(conn) {
+  for (const [table, column, type] of ADDED_COLUMNS) {
+    const existing = conn.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!existing.includes(column)) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+/**
  * Deschide baza si aplica schema. Schema e scrisa cu CREATE TABLE IF NOT EXISTS,
  * deci rularea repetata e sigura.
  */
@@ -20,6 +37,7 @@ export function openDatabase(file = process.env.ZOF_DB_FILE || path.join(here, '
 
   db = new DatabaseSync(file);
   db.exec(fs.readFileSync(path.join(here, 'schema.sql'), 'utf8'));
+  addMissingColumns(db);
   return db;
 }
 

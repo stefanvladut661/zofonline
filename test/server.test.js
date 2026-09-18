@@ -243,6 +243,68 @@ ok('identifica magazinul cu cele mai multe vanzari', d.best_store === 'Argeș Ma
 ok('calculeaza marja', d.estimated_margin > 0 && d.estimated_margin < 100);
 ok('are timestamp de actualizare', !!Date.parse(d.last_updated));
 
+// Perioadele sunt ancorate pe ultima zi cu vanzari (azi, in test) si vin explicit.
+const todayLocal = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; })();
+ok('ultima zi raportata = ziua ultimei vanzari', d.period?.last_day?.to === todayLocal, JSON.stringify(d.period?.last_day));
+ok('vanzarile ultimei zile = vanzarile de azi', d.sales_last_day === d.sales_today && d.sales_last_day_units === 3);
+ok('saptamana = 7 zile pana la ultima zi', d.period.week.to === todayLocal
+  && (Date.parse(d.period.week.to) - Date.parse(d.period.week.from)) / 86400_000 === 6, JSON.stringify(d.period.week));
+ok('luna = de la 1 pana la ultima zi', d.period.month.from === `${todayLocal.slice(0, 7)}-01` && d.period.month.to === todayLocal);
+// „vs luna trecuta" = aceeasi perioada din luna precedenta (1 .. aceeasi zi), nu luna intreaga.
+const expectedPrev = (() => {
+  const n = new Date();
+  const first = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+  const lastDayPrev = new Date(n.getFullYear(), n.getMonth(), 0).getDate();
+  const to = new Date(n.getFullYear(), n.getMonth() - 1, Math.min(n.getDate(), lastDayPrev));
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { from: iso(first), to: iso(to) };
+})();
+ok('luna trecuta = aceeasi perioada din luna precedenta', JSON.stringify(d.period.prev_month) === JSON.stringify(expectedPrev),
+  `${JSON.stringify(d.period.prev_month)} vs ${JSON.stringify(expectedPrev)}`);
+const { reportingPeriods } = await import('../server/routes/dashboard.js');
+ok('31 martie -> 1–28 februarie (luna mai scurta se opreste la ultima ei zi)',
+  JSON.stringify(reportingPeriods('2026-03-31').prev_month) === '{"from":"2026-02-01","to":"2026-02-28"}',
+  JSON.stringify(reportingPeriods('2026-03-31').prev_month));
+ok('17 septembrie -> 1–17 august', JSON.stringify(reportingPeriods('2026-09-17').prev_month) === '{"from":"2026-08-01","to":"2026-08-17"}');
+ok('1 ianuarie -> 1–1 decembrie, anul trecut', JSON.stringify(reportingPeriods('2026-01-01').prev_month) === '{"from":"2025-12-01","to":"2025-12-01"}');
+ok('fara luna trecuta, evolutia e null (nu 0%)', d.evolution_vs_last_month === null);
+ok('fara comenzi online, evolutia online e null', d.shopify_evolution_vs_last_month === null && d.shopify_orders === 0);
+ok('marja se bazeaza pe tot venitul cand toate produsele au pret de achizitie', d.margin_coverage === 100);
+ok('profitul estimat = Σ cantitate × (pret − cost)', d.estimated_profit === (1290 - 600) + 2 * (890 - 400));
+ok('fara fisier de export cunoscut, data_as_of e null dar sync-ul e stiut', d.data_as_of === null && !!Date.parse(d.last_sync_at));
+
+// Un produs FARA pret de achizitie nu devine „profit 100%": iese din calcul si scade acoperirea.
+await agentPost('/api/ingest', rotated.apiKey, 'pc-arges-1', {
+  products: [{ sku: 'SRV-MANOPERA', name: 'Manoperă', category: 'servicii', price: 30 }],
+  sales: [{ source_ref: 'BON-3001', sku: 'SRV-MANOPERA', quantity: 1, unit_price: 30, sold_at: new Date().toISOString() }],
+});
+const d2 = (await api('GET', '/api/dashboard')).data;
+ok('produsul fara cost nu intra in profit', d2.estimated_profit === d.estimated_profit);
+ok('acoperirea marjei scade sub 100%', d2.margin_coverage < 100 && d2.margin_coverage > 90, String(d2.margin_coverage));
+
+console.log('\n--- 8b. Data fisierului de export (in loc de „Live") ---');
+const fileTime = '2026-09-17T06:12:33.000Z';
+const withFile = await agentPost('/api/ingest', rotated.apiKey, 'pc-arges-1', {
+  source_file_name: 'ZOF-Arges-001.json', source_file_mtime: fileTime,
+  sales: [{ source_ref: 'BON-4001', sku: 'RB-3025-001', quantity: 1, unit_price: 1290, sold_at: new Date().toISOString() }],
+});
+ok('ingest-ul confirma data fisierului', withFile.status === 200 && withFile.data.data_as_of === fileTime);
+let fresh = (await api('GET', '/api/dashboard')).data;
+ok('dashboard-ul expune data fisierului', fresh.data_as_of === fileTime);
+ok('… si fisierul, per locatie', fresh.data_sources.some((s) => s.file === 'ZOF-Arges-001.json' && s.location === 'Argeș Mall' && s.as_of === fileTime));
+
+await agentPost('/api/ingest', rotated.apiKey, 'pc-arges-1', {
+  source_file_name: 'ZOF-Arges-000.json', source_file_mtime: '2026-09-10T06:00:00.000Z',
+  sales: [{ source_ref: 'BON-4001', sku: 'RB-3025-001', quantity: 1, unit_price: 1290, sold_at: new Date().toISOString() }],
+});
+fresh = (await api('GET', '/api/dashboard')).data;
+ok('retrimiterea unui fisier mai vechi nu da data inapoi', fresh.data_as_of === fileTime
+  && fresh.data_sources[0].file === 'ZOF-Arges-001.json');
+ok('data de fisier invalida -> 400', (await agentPost('/api/ingest', rotated.apiKey, 'pc-arges-1',
+  { source_file_mtime: 'ieri', inventory: [{ sku: 'RB-3025-001', quantity: 7 }] })).status === 400);
+ok('jurnalul retine fisierul, nu continutul',
+  (await api('GET', '/api/admin/sync-events')).data.some((e) => e.payload?.source_file === 'ZOF-Arges-001.json'));
+
 const top = (await api('GET', '/api/top-products')).data;
 ok('top produse sortat dupa venit', top[0].revenue >= top[1].revenue);
 ok('top produse include stocul', typeof top[0].stock === 'number');
@@ -250,6 +312,13 @@ ok('top produse include stocul', typeof top[0].stock === 'number');
 const locations = (await api('GET', '/api/locations')).data;
 ok('locatiile au vanzarile lor', locations.find((l) => l.name === 'Argeș Mall').sales_today > 0);
 ok('locatia online e listata', locations.some((l) => l.type === 'online'));
+ok('locatiile au vanzarile ultimei zile si perioada', locations.every((l) => typeof l.sales_last_day === 'number' && l.period?.last_day?.to === todayLocal));
+
+const perf = (await api('GET', '/api/performance')).data;
+ok('performanta e impartita per magazin', Array.isArray(perf.by_location) && perf.by_location.length === 2);
+ok('magazinul cu vanzari e primul, cu 100% pondere', perf.by_location[0].name === 'Argeș Mall' && perf.by_location[0].share === 100);
+ok('locatia fara vanzari apare cu 0', perf.by_location[1].revenue === 0 && perf.by_location[1].share === 0);
+ok('performanta spune si perioada', perf.period?.month?.to === todayLocal);
 
 const products = (await api('GET', '/api/products')).data;
 ok('produsele au stoc per locatie', products[0].stock_locations && typeof products[0].stock_locations === 'object');

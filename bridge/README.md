@@ -183,6 +183,8 @@ Exemplu real din `bridge/out/ZOF-Centru-001.payload.json` (bonul 16073):
 {
   "agent_version": "dorsoft-json-bridge/1.0.0",
   "watermark": "2026-09-15T09:11:16.000Z",       // cel mai nou bon trimis
+  "source_file_name": "ZOF-Centru-001.json",     // fișierul de export și data lui (mtime);
+  "source_file_mtime": "2026-09-16T06:12:33.000Z", // dashboard-ul o afișează ca „Date din …" în loc de „Live"
   "products": [
     { "sku": "centru-9349", "name": "Lentile RHEIN VISION Single Vision 1.6 TRANSITIONS GEN S+ ARUS BLUE",
       "category": "lentile", "price": 1097, "brand": null, "size": null, "cost_price": null, "image_url": null,
@@ -205,6 +207,10 @@ Exemplu real din `bridge/out/ZOF-Centru-001.payload.json` (bonul 16073):
 2 × 1097 + 300 + 30 − 524 = **2000 lei** = `TotalCuTVA` al bonului în DorSoft.
 
 - Orele din DorSoft sunt ora locală (`Europe/Bucharest`); se trimit în UTC, ISO 8601.
+- `source_file_mtime` e data de modificare a fișierului de export, așa cum o vede
+  puntea. Serverul o reține per locație (doar înainte, niciodată înapoi) și
+  dashboard-ul o afișează ca „Date din <data>" — exportul se face a doua zi,
+  deci cifrele nu sunt niciodată „de acum".
 - `price` din catalog = prețul de la cea mai recentă vânzare a articolului.
 - `category` e o clasificare după nume (lentile / rame / servicii / accesorii /
   discount); ce nu se recunoaște rămâne `null` — nu ghicim.

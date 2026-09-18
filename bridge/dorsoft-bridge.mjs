@@ -78,6 +78,11 @@ async function processFile(filePath, opts) {
   const stem = fileName.replace(/\.json$/i, '');
   const { rows, ignoredColumns } = parseExport(fs.readFileSync(filePath), fileName);
 
+  // Momentul in care DorSoft a scris exportul (mtime). Serverul il retine si
+  // dashboard-ul il afiseaza ca „date din <data>" — nu „Live", pentru ca
+  // exportul ruleaza a doua zi si cifrele nu sunt niciodata de acum.
+  const sourceFile = { name: fileName, mtime: fs.statSync(filePath).mtime };
+
   const pairs = parseFileLocations();
   const location = locationForFile(filePath, pairs, opts.location);
   if (opts.location) {
@@ -87,8 +92,9 @@ async function processFile(filePath, opts) {
   }
 
   const result = transform({ rows, location, timeZone: timeZone(), fileName, ignoredColumns, exportRowCap: exportRowCap() });
-  const payload = buildPayload(result);
+  const payload = buildPayload({ ...result, sourceFile });
   const { report } = result;
+  report.sourceFile = sourceFile;
 
   // Payload-ul si raportul se pastreaza si la trimitere, ca urma de audit.
   // La --send raportul e rescris dupa trimitere, cu rezultatul real.

@@ -33,6 +33,11 @@ export function renderReport(r, { dryRun, status = dryRun ? 'dry-run' : 'pending
   out.push('='.repeat(72));
   if (outcome) out.push(`Rezultat:  ${outcome}`);
   out.push(`Fisier:    ${r.fileName}`);
+  if (r.sourceFile?.mtime) {
+    const when = new Date(r.sourceFile.mtime);
+    out.push(`Exportat:  ${when.toLocaleString('ro-RO', { timeZone: r.timeZone, dateStyle: 'short', timeStyle: 'medium' })} ` +
+      `(data fisierului; dashboard-ul o afiseaza ca „date din …")`);
+  }
   out.push(`Locatie:   ${r.location}   (SKU-urile devin "${r.location}-<ArticolRecNo>")`);
   out.push(`Fus orar:  ${r.timeZone} -> orele sunt trimise in UTC (ISO 8601)`);
   if (r.period.from) out.push(`Perioada:  ${r.period.from} … ${r.period.to} (bonurile incluse, dupa data locala)`);

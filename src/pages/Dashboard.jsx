@@ -1,5 +1,5 @@
 import React from 'react';
-import PageHeader from '@/components/ui/PageHeader';
+import PageHeader, { freshnessOf } from '@/components/ui/PageHeader';
 import DashboardStats from '@/components/dashboard/DashboardStats';
 import SalesChart from '@/components/dashboard/SalesChart';
 import TopProductsList from '@/components/dashboard/TopProductsList';
@@ -43,10 +43,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <PageHeader 
-        title="Dashboard" 
+      <PageHeader
+        title="Dashboard"
         subtitle="Zof Optogerman — Prezentare generală"
-        lastUpdated={dashData?.last_updated || new Date().toISOString()}
+        freshness={freshnessOf(dashData)}
       />
 
       <DashboardStats data={dashData} loading={loadingDash} />
@@ -59,7 +59,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <LocationsOverview locations={locations} loading={loadingLoc} />
+        <LocationsOverview locations={locations} loading={loadingLoc} period={dashData?.period} />
         <AlertsPreview alerts={alerts} loading={loadingAlerts} />
       </div>
     </div>

@@ -88,6 +88,14 @@ export function handleIngest({ connector, body }) {
     channel: s.channel === 'online' ? 'online' : 'fizic',
   }));
 
+  // Momentul fisierului de export (mtime-ul lui, cum il vede agentul) si numele
+  // lui. Nu e „acum": exportul DorSoft se face a doua zi, iar dashboard-ul
+  // trebuie sa spuna DIN CE MOMENT sunt cifrele, nu cand a rulat puntea.
+  const sourceFileMtime = body.source_file_mtime == null
+    ? null
+    : new Date(requireIsoDate(body.source_file_mtime, 'source_file_mtime')).toISOString();
+  const sourceFileName = body.source_file_name == null ? null : String(body.source_file_name).trim().slice(0, 200) || null;
+
   const now = new Date().toISOString();
 
   return transaction((db) => {
@@ -141,17 +149,30 @@ export function handleIngest({ connector, body }) {
 
     // Watermark-ul avanseaza doar dupa ce datele au intrat. Daca tranzactia
     // cade, agentul retrimite de la acelasi punct.
+    //
+    // La fel data fisierului: doar inainte, niciodata inapoi — retrimiterea unui
+    // export vechi (permisa, e idempotenta) nu trebuie sa „imbatraneasca" datele.
     const watermark = body.watermark ?? null;
     db.prepare(`
-      INSERT INTO sync_state (connector_id, location_id, last_watermark, last_heartbeat_at, status, agent_version, updated_at)
-      VALUES (?, ?, ?, ?, 'online', ?, ?)
+      INSERT INTO sync_state (connector_id, location_id, last_watermark, last_heartbeat_at, status, agent_version,
+                              data_as_of, data_source_file, updated_at)
+      VALUES (?, ?, ?, ?, 'online', ?, ?, ?, ?)
       ON CONFLICT(connector_id) DO UPDATE SET
         last_watermark    = COALESCE(excluded.last_watermark, sync_state.last_watermark),
         last_heartbeat_at = excluded.last_heartbeat_at,
         status            = 'online',
         agent_version     = COALESCE(excluded.agent_version, sync_state.agent_version),
+        data_as_of        = CASE
+                              WHEN excluded.data_as_of IS NULL THEN sync_state.data_as_of
+                              WHEN sync_state.data_as_of IS NULL OR excluded.data_as_of > sync_state.data_as_of THEN excluded.data_as_of
+                              ELSE sync_state.data_as_of END,
+        data_source_file  = CASE
+                              WHEN excluded.data_as_of IS NULL THEN sync_state.data_source_file
+                              WHEN sync_state.data_as_of IS NULL OR excluded.data_as_of > sync_state.data_as_of THEN excluded.data_source_file
+                              ELSE sync_state.data_source_file END,
         updated_at        = excluded.updated_at
-    `).run(connector.connector_id, locationId, watermark, now, body.agent_version ?? null, now);
+    `).run(connector.connector_id, locationId, watermark, now, body.agent_version ?? null,
+      sourceFileMtime, sourceFileName, now);
 
     db.prepare(`
       UPDATE connectors SET
@@ -170,6 +191,7 @@ export function handleIngest({ connector, body }) {
       JSON.stringify({
         record_count: cleanProducts.length + cleanInventory.length + salesInserted,
         watermark,
+        ...(sourceFileMtime ? { source_file: sourceFileName, data_as_of: sourceFileMtime } : {}),
       }));
 
     return {
@@ -181,6 +203,7 @@ export function handleIngest({ connector, body }) {
       },
       duplicates,
       watermark,
+      data_as_of: sourceFileMtime,
       server_time: now,
     };
   });

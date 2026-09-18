@@ -8,6 +8,8 @@
  *  - numerele se scriu cu virgula zecimala, cum le asteapta Excel-ul romanesc.
  */
 
+import { toXlsx, XLSX_MIME } from './xlsx';
+
 const SEP = ';';
 const BOM = '﻿';
 
@@ -52,6 +54,14 @@ export function downloadFile(filename, content, mime = 'text/csv;charset=utf-8')
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * Excel nativ (.xlsx): aceleasi coloane ca la CSV, dar numerele raman numere
+ * si diacriticele nu depind de cum ghiceste Excel codificarea.
+ */
+export function downloadXlsx(filename, { columns, rows, sheetName, title }) {
+  downloadFile(filename, new Blob([toXlsx(columns, rows, { sheetName, title })], { type: XLSX_MIME }));
+}
+
 export function timestampSuffix(date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}_${p(date.getHours())}${p(date.getMinutes())}`;
@@ -64,6 +74,62 @@ export function formatDateTime(value) {
   return d.toLocaleString('ro-RO', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+// ─── PDF ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Fonturile standard din PDF (Helvetica & co.) nu au glifuri pentru ă â î ș ț —
+ * jsPDF le desena ca spatii goale („Ram bărbai”). Incorporam Roboto (OFL, in
+ * public/fonts), care le are. Se descarca o singura data pe sesiune, doar cand
+ * se genereaza primul PDF.
+ */
+const PDF_FONT_FAMILY = 'Roboto';
+const PDF_FONT_FILES = { normal: 'Roboto-Regular.ttf', bold: 'Roboto-Bold.ttf' };
+let pdfFontsPromise = null;
+
+function bytesToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  // In bucati: String.fromCharCode(...bytes) depaseste limita de argumente.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function loadPdfFonts() {
+  if (!pdfFontsPromise) {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
+    pdfFontsPromise = Promise.all(Object.entries(PDF_FONT_FILES).map(async ([style, file]) => {
+      const res = await fetch(`${base}fonts/${file}`);
+      if (!res.ok) throw new Error(`fontul ${file} nu s-a putut încărca (HTTP ${res.status})`);
+      return [style, bytesToBase64(await res.arrayBuffer())];
+    })).then(Object.fromEntries)
+      .catch((err) => { pdfFontsPromise = null; throw err; });
+  }
+  return pdfFontsPromise;
+}
+
+/** Ultima solutie, daca fontul nu se poate incarca: text lizibil, fara diacritice. */
+function stripDiacritics(text) {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[șş]/g, 's').replace(/[ȘŞ]/g, 'S')
+    .replace(/[țţ]/g, 't').replace(/[ȚŢ]/g, 'T');
+}
+
+/** Inregistreaza fontul in document; intoarce familia de folosit si cum se pregateste textul. */
+async function preparePdfFont(doc) {
+  try {
+    const fonts = await loadPdfFonts();
+    for (const [style, file] of Object.entries(PDF_FONT_FILES)) {
+      doc.addFileToVFS(file, fonts[style]);
+      doc.addFont(file, PDF_FONT_FAMILY, style);
+    }
+    return { family: PDF_FONT_FAMILY, text: (s) => s };
+  } catch (err) {
+    console.warn(`PDF fără diacritice: ${err.message}`);
+    return { family: 'helvetica', text: stripDiacritics };
+  }
+}
+
 /**
  * PDF cu tabel, desenat manual peste jsPDF.
  * Nu folosim jspdf-autotable ca sa nu adaugam o dependinta pentru cateva tabele
@@ -72,6 +138,8 @@ export function formatDateTime(value) {
 export async function downloadPdf(filename, { title, subtitle, columns, rows, summary }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: columns.length > 5 ? 'landscape' : 'portrait', unit: 'pt' });
+  const font = await preparePdfFont(doc);
+  const t = font.text;
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -79,40 +147,74 @@ export async function downloadPdf(filename, { title, subtitle, columns, rows, su
   const usable = pageWidth - margin * 2;
   let y = margin;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(font.family, 'bold');
   doc.setFontSize(16);
-  doc.text(title, margin, y);
+  doc.text(t(title), margin, y);
   y += 18;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(font.family, 'normal');
   doc.setFontSize(9);
   doc.setTextColor(120);
-  doc.text(subtitle ?? `Generat: ${formatDateTime(new Date())}`, margin, y);
+  doc.text(t(subtitle ?? `Generat: ${formatDateTime(new Date())}`), margin, y);
   y += 20;
 
   if (summary?.length) {
     doc.setTextColor(40);
     doc.setFontSize(10);
     for (const line of summary) {
-      doc.text(line, margin, y);
+      doc.text(t(line), margin, y);
       y += 14;
     }
     y += 6;
   }
 
-  const colWidth = usable / columns.length;
+  const cellPad = 4;
+  const cellText = (c, row) => {
+    const raw = c.map ? c.map(row) : row[c.key];
+    return raw === null || raw === undefined ? '' : t(String(raw));
+  };
+
+  // Latimea coloanelor: dupa continutul masurat (antet + valori), nu egale.
+  // Altfel „Tip" ocupa cat „Denumire produs" si antetele lungi se taie desi
+  // ramane loc gol alaturi. Daca tot nu incape, se scaleaza proportional si
+  // `fit` taie cu „…".
+  const natural = columns.map((c) => {
+    doc.setFont(font.family, 'bold');
+    doc.setFontSize(9);
+    let w = doc.getTextWidth(t(String(c.label)));
+    doc.setFont(font.family, 'normal');
+    doc.setFontSize(8);
+    for (const row of rows.slice(0, 300)) w = Math.max(w, doc.getTextWidth(cellText(c, row)));
+    return Math.max(30, w + cellPad * 2 + 2);
+  });
+  const naturalTotal = natural.reduce((s, w) => s + w, 0);
+  const colWidths = natural.map((w) => (w / naturalTotal) * usable);
+  const colX = colWidths.map((_, i) => margin + colWidths.slice(0, i).reduce((s, w) => s + w, 0));
+
+  // Taiem ce nu incape, masurat cu fontul curent — nu estimat din numarul de
+  // caractere, ca sa nu se suprapuna coloanele si sa nu pierdem loc degeaba.
+  const fit = (text, i) => {
+    const max = colWidths[i] - cellPad * 2;
+    if (doc.getTextWidth(text) <= max) return text;
+    let lo = 0, hi = text.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (doc.getTextWidth(`${text.slice(0, mid)}…`) <= max) lo = mid; else hi = mid - 1;
+    }
+    return `${text.slice(0, lo)}…`;
+  };
 
   const drawHeader = () => {
     doc.setFillColor(240, 240, 245);
     doc.rect(margin, y - 11, usable, 18, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(font.family, 'bold');
     doc.setFontSize(9);
     doc.setTextColor(40);
     columns.forEach((c, i) => {
-      doc.text(String(c.label), margin + i * colWidth + 4, y);
+      doc.text(fit(t(String(c.label)), i), colX[i] + cellPad, y);
     });
     y += 18;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(font.family, 'normal');
   };
 
   drawHeader();
@@ -126,11 +228,7 @@ export async function downloadPdf(filename, { title, subtitle, columns, rows, su
       doc.setFontSize(8);
     }
     columns.forEach((c, i) => {
-      const raw = c.map ? c.map(row) : row[c.key];
-      const text = raw === null || raw === undefined ? '' : String(raw);
-      // Taiem ce nu incape, ca sa nu se suprapuna coloanele.
-      const max = Math.floor(colWidth / 4.4);
-      doc.text(text.length > max ? `${text.slice(0, max - 1)}…` : text, margin + i * colWidth + 4, y);
+      doc.text(fit(cellText(c, row), i), colX[i] + cellPad, y);
     });
     y += 13;
   }
